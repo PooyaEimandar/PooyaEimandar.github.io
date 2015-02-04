@@ -1,0 +1,5 @@
+﻿.body{background: url('../imgs/93.10.04-02.jpg');background-size: 100%;}
+.fade{padding: 50px;font-size: 32px;font-weight: bold;text-align: center;background: #d0d0d0;-webkit-opacity: 0.7;-moz-opacity: 0.7;opacity: 0.8;-webkit-transition: all 0.5s ease;-moz-transition: all 0.5s ease;-ms-transition: all 0.5s ease;-o-transition: all 0.5s ease;transition: all 0.5s ease;}
+.fade:hover{background: #B9B8AC;-webkit-opacity: 1.0;-moz-opacity: 1.0;opacity: 1.0;}
+.bold{font-size: 16px;font-weight: bold;}
+.pbold{padding: 50px;font-size: 32px;font-weight: bold;text-align: center;background: #d0d0d0;}
