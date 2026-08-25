@@ -1,0 +1,49 @@
+[package]
+name = "pooya-portfolio"
+version = "0.1.0"
+edition = "2024"
+description = "Pooya Eimandar's Rust/WebGPU timeline portfolio"
+license = "MIT"
+publish = false
+
+[lib]
+name = "pooya_portfolio"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "pooya-portfolio"
+path = "src/main.rs"
+
+[dependencies]
+bytemuck = { version = "1.25.2", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.151"
+sib = { git = "https://github.com/PooyaEimandar/sib", rev = "960c39bcde152f50c87fa3926c8bc8ff53e2b5eb", default-features = false, features = ["render"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "=0.3.103"
+wasm-bindgen = "=0.2.126"
+wasm-bindgen-futures = "=0.4.76"
+web-sys = { version = "=0.3.103", features = [
+    "CustomEvent",
+    "CustomEventInit",
+    "Document",
+    "Element",
+    "EventTarget",
+    "HtmlCanvasElement",
+    "Node",
+    "Response",
+    "Window",
+    "console",
+] }
+
+[dev-dependencies]
+naga = { version = "=29.0.4", features = ["wgsl-in"] }
+pollster = "=0.4.0"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = "s"
+strip = true
