@@ -25,16 +25,31 @@ const BINARY_GLYPH_COUNT: u32 = 2u;
 // readable on both desktop and narrow mobile canvases.
 const BINARY_GRID_SIZE: vec2<f32> = vec2<f32>(96.0, 132.0);
 
-// GPU-native 5x7 bitmaps for the only two symbols used by the portrait: 0 and 1.
-const BINARY_GLYPH_ROWS: array<array<u32, 7>, 2> = array<array<u32, 7>, 2>(
-  // 0
-  array<u32, 7>(14u, 17u, 19u, 21u, 25u, 17u, 14u),
-  // 1
-  array<u32, 7>(4u, 12u, 4u, 4u, 4u, 4u, 14u),
-);
-
 fn hash11(value: f32) -> f32 {
   return fract(sin(value * 127.1 + 23.47) * 43758.5453123);
+}
+
+fn binary_row_bits(glyph: u32, row: u32) -> u32 {
+  if glyph == 0u {
+    switch row {
+      case 0u: { return 14u; }
+      case 1u: { return 17u; }
+      case 2u: { return 19u; }
+      case 3u: { return 21u; }
+      case 4u: { return 25u; }
+      case 5u: { return 17u; }
+      default: { return 14u; }
+    }
+  }
+  switch row {
+    case 0u: { return 4u; }
+    case 1u: { return 12u; }
+    case 2u: { return 4u; }
+    case 3u: { return 4u; }
+    case 4u: { return 4u; }
+    case 5u: { return 4u; }
+    default: { return 14u; }
+  }
 }
 
 fn binary_bitmap_mask(cell: vec2<f32>, glyph: u32) -> f32 {
@@ -44,7 +59,7 @@ fn binary_bitmap_mask(cell: vec2<f32>, glyph: u32) -> f32 {
   let scaled = clamp(cell, vec2<f32>(0.0), vec2<f32>(0.9999)) * vec2<f32>(5.0, 7.0);
   let column = u32(floor(scaled.x));
   let row = u32(floor(scaled.y));
-  let row_bits = BINARY_GLYPH_ROWS[glyph][row];
+  let row_bits = binary_row_bits(glyph, row);
   let bit = (row_bits >> (4u - column)) & 1u;
   let pixel = abs(fract(scaled) - vec2<f32>(0.5));
   let pixel_shape = 1.0 - smoothstep(0.34, 0.49, max(pixel.x, pixel.y));
@@ -76,7 +91,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
   let screen_uv = vec2<f32>(input.uv.x, 1.0 - input.uv.y);
   let portrait_min = uniforms.placement.xy - uniforms.placement.zw * 0.5;
   let portrait_uv = (screen_uv - portrait_min) / uniforms.placement.zw;
-  if any(portrait_uv < vec2<f32>(0.0)) || any(portrait_uv > vec2<f32>(1.0)) {
+  if any(portrait_uv < vec2<f32>(0.0)) {
+    discard;
+  }
+  if any(portrait_uv > vec2<f32>(1.0)) {
     discard;
   }
 
@@ -127,12 +145,6 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     portrait_uv.y + reveal_noise,
   );
 
-  let blink_phase = fract(time / 4.65 + 0.035 * sin(time * 0.37));
-  let blink = exp(-pow((blink_phase - 0.91) / 0.030, 2.0)) * motion;
-  let left_eye = ellipse_mask(portrait_uv, uniforms.eyes.xy, vec2<f32>(0.060, 0.025));
-  let right_eye = ellipse_mask(portrait_uv, uniforms.eyes.zw, vec2<f32>(0.060, 0.025));
-  let eyelids = clamp(left_eye + right_eye, 0.0, 1.0) * blink;
-
   let look = vec2<f32>(sin(time * 0.61) * 0.006, sin(time * 0.39) * 0.002) * motion;
   let left_iris = ellipse_mask(
     portrait_uv,
@@ -144,7 +156,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     uniforms.eyes.zw + look,
     vec2<f32>(0.014, 0.011),
   );
-  let iris = clamp(left_iris + right_iris, 0.0, 1.0) * (1.0 - blink);
+  let iris = clamp(left_iris + right_iris, 0.0, 1.0);
 
   let portrait_green = vec3<f32>(0.010, 0.18, 0.050)
     + vec3<f32>(0.018, 0.52, 0.135) * luminance * 0.74;
@@ -155,7 +167,6 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
   var color = portrait_green * (0.40 + glyph * 0.24) * scan;
   color += vec3<f32>(0.055, 0.90, 0.245) * glyph_energy;
   color += vec3<f32>(0.22, 1.0, 0.47) * iris * 0.24;
-  color *= 1.0 - eyelids * 0.82;
 
   let alpha = subject_alpha
     * reveal_mask

@@ -16,3 +16,11 @@ renderer, contains digitized font data Copyright © 2012–2015 The Mozilla
 Foundation and Telefónica S.A. It is distributed under the SIL Open Font
 License 1.1; the complete license is included at
 `assets/fonts/FiraMono-LICENSE.txt`.
+
+## Vazirmatn
+
+`assets/fonts/Vazirmatn-Regular.ttf` is used as the source for the Persian
+Matrix glyph atlas embedded in the WebAssembly renderer. The font is Copyright
+The Vazirmatn Project Authors and is distributed under the SIL Open Font
+License 1.1; the complete license is included at
+`assets/fonts/Vazirmatn-LICENSE.txt`.

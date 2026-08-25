@@ -8,7 +8,7 @@ use std::{
 };
 
 use bytemuck::{Pod, Zeroable};
-use portrait::PortraitImage;
+use portrait::RgbaKtxImage;
 use sib::render::{
     Example, ExampleSettings, FrameStats, RenderContext, RenderError, RenderResult, bind_group,
     buffer, glam, render_pass, shader, text, text_mesh, texture, wgpu, winit,
@@ -16,9 +16,15 @@ use sib::render::{
 use timeline::TimelineSlide;
 
 const FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/FiraMono-Regular.ttf");
+const MATRIX_GLYPH_ATLAS_BYTES: &[u8] = include_bytes!("../assets/textures/vazirmatn-persian.ktx");
+const MATRIX_GLYPH_ATLAS_WIDTH: u32 = 256;
+const MATRIX_GLYPH_ATLAS_HEIGHT: u32 = 128;
 const MATRIX_INTRO_END: f32 = 1.65;
 const FACE_REVEAL_END: f32 = 3.25;
 const TIMELINE_START: f32 = 3.55;
+const MATRIX_SIGNAL_MIN_INTERVAL: f32 = 30.0;
+const MATRIX_SIGNAL_MAX_INTERVAL: f32 = 60.0;
+const MATRIX_SIGNAL_DURATION: f32 = 8.0;
 const SLIDE_DURATION: f32 = 0.82;
 const TERMINAL_TEXT_SCALE: f32 = 1.5;
 const TERMINAL_BASE_FONT_SIZE: f32 = 0.142;
@@ -31,6 +37,8 @@ const TERMINAL_DEPTH: f32 = 0.012 * TERMINAL_TEXT_SCALE;
 const TERMINAL_STROKE_WIDTH: f32 = TERMINAL_FONT_SIZE * 0.045;
 const _: () = assert!(MATRIX_INTRO_END < FACE_REVEAL_END);
 const _: () = assert!(FACE_REVEAL_END < TIMELINE_START);
+const _: () = assert!(MATRIX_SIGNAL_MIN_INTERVAL < MATRIX_SIGNAL_MAX_INTERVAL);
+const _: () = assert!(MATRIX_SIGNAL_DURATION < MATRIX_SIGNAL_MIN_INTERVAL);
 const _: () = assert!(TERMINAL_TEXT_SCALE == 1.5);
 const _: () = assert!(TERMINAL_STROKE_WIDTH <= TERMINAL_FONT_SIZE * 0.05);
 
@@ -54,18 +62,122 @@ fn terminal_primary_action(
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+struct MatrixSignalSchedule {
+    rng_state: u32,
+    next_start: f32,
+    active_start: f32,
+    column: f32,
+}
+
+impl MatrixSignalSchedule {
+    fn with_seed(seed: u32) -> Self {
+        let mut schedule = Self {
+            rng_state: seed.max(1),
+            next_start: 0.0,
+            active_start: -MATRIX_SIGNAL_DURATION,
+            column: 0.5,
+        };
+        schedule.next_start = schedule.random_interval();
+        schedule
+    }
+
+    fn next_random(&mut self) -> f32 {
+        let mut value = self.rng_state;
+        value ^= value << 13;
+        value ^= value >> 17;
+        value ^= value << 5;
+        self.rng_state = value;
+        value as f32 / u32::MAX as f32
+    }
+
+    fn random_interval(&mut self) -> f32 {
+        MATRIX_SIGNAL_MIN_INTERVAL
+            + self.next_random() * (MATRIX_SIGNAL_MAX_INTERVAL - MATRIX_SIGNAL_MIN_INTERVAL)
+    }
+
+    fn update(&mut self, elapsed: f32) {
+        if elapsed >= self.next_start {
+            self.active_start = elapsed;
+            // Keep the complete atlas glyph cell away from a clipped edge column.
+            self.column = 0.06 + self.next_random() * 0.88;
+            self.next_start = elapsed + self.random_interval();
+        }
+    }
+
+    fn uniforms(self, elapsed: f32, motion_enabled: bool) -> [f32; 4] {
+        let age = elapsed - self.active_start;
+        let active = motion_enabled && (0.0..MATRIX_SIGNAL_DURATION).contains(&age);
+        [
+            self.active_start,
+            MATRIX_SIGNAL_DURATION,
+            self.column,
+            if active { 1.0 } else { 0.0 },
+        ]
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn matrix_signal_seed() -> u32 {
+    let timestamp_bits = js_sys::Date::now().to_bits();
+    ((timestamp_bits as u32) ^ ((timestamp_bits >> 32) as u32) ^ 0x4a53_4848).max(1)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn matrix_signal_seed() -> u32 {
+    0x4a53_4848
+}
+
+#[cfg(target_arch = "wasm32")]
+fn current_year() -> i32 {
+    js_sys::Date::new_0().get_full_year() as i32
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn current_year() -> i32 {
+    let unix_days = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        / 86_400;
+    gregorian_year_from_unix_days(unix_days as i64)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn gregorian_year_from_unix_days(unix_days: i64) -> i32 {
+    let shifted_days = unix_days + 719_468;
+    let era = if shifted_days >= 0 {
+        shifted_days
+    } else {
+        shifted_days - 146_096
+    } / 146_097;
+    let day_of_era = shifted_days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
+    (year + i64::from(month <= 2)) as i32
+}
+
+fn copyright_notice() -> String {
+    format!("© {} Pooya Eimandar. All rights reserved.", current_year())
+}
+
 #[cfg(target_arch = "wasm32")]
 thread_local! {
     static LINK_PICK_SNAPSHOT: RefCell<Option<LinkPickSnapshot>> = const { RefCell::new(None) };
 }
 
-type PendingPortrait = Rc<RefCell<Option<Result<PortraitImage, String>>>>;
+type PendingPortrait = Rc<RefCell<Option<Result<RgbaKtxImage, String>>>>;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 struct MatrixUniforms {
     timing: [f32; 4],
     viewport: [f32; 4],
+    signal: [f32; 4],
 }
 
 #[repr(C)]
@@ -113,6 +225,47 @@ struct Pipelines {
     text: wgpu::RenderPipeline,
 }
 
+struct GpuMatrixGlyphAtlas {
+    _texture: texture::Texture,
+    bind_group: wgpu::BindGroup,
+}
+
+impl GpuMatrixGlyphAtlas {
+    fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        layout: &wgpu::BindGroupLayout,
+        uniform_buffer: &wgpu::Buffer,
+    ) -> RenderResult<Self> {
+        let image =
+            portrait::parse_ktx1_rgba8_asset(MATRIX_GLYPH_ATLAS_BYTES, "vazirmatn-persian.ktx")?;
+        if image.width != MATRIX_GLYPH_ATLAS_WIDTH || image.height != MATRIX_GLYPH_ATLAS_HEIGHT {
+            return Err(RenderError::message(format!(
+                "vazirmatn-persian.ktx is {}x{}; expected {}x{}",
+                image.width, image.height, MATRIX_GLYPH_ATLAS_WIDTH, MATRIX_GLYPH_ATLAS_HEIGHT,
+            )));
+        }
+        let rgba = texture::ImageRgba8::new(image.width, image.height, image.rgba)?;
+        let texture = texture::Texture::from_rgba8_2d(
+            device,
+            queue,
+            Some("Vazirmatn Persian glyph atlas"),
+            &rgba,
+        )?;
+        let bind_group = bind_group::uniform_texture_sampler_bind_group(
+            device,
+            Some("matrix glyph atlas bind group"),
+            layout,
+            uniform_buffer,
+            &texture,
+        );
+        Ok(Self {
+            _texture: texture,
+            bind_group,
+        })
+    }
+}
+
 struct GpuPortrait {
     _texture: texture::Texture,
     bind_group: wgpu::BindGroup,
@@ -124,7 +277,7 @@ impl GpuPortrait {
         context: &RenderContext,
         layout: &wgpu::BindGroupLayout,
         uniform_buffer: &wgpu::Buffer,
-        image: PortraitImage,
+        image: RgbaKtxImage,
     ) -> RenderResult<Self> {
         let aspect_ratio = image.aspect_ratio();
         let rgba = texture::ImageRgba8::new(image.width, image.height, image.rgba)?;
@@ -157,7 +310,7 @@ impl GpuPortrait {
             context,
             layout,
             uniform_buffer,
-            PortraitImage {
+            RgbaKtxImage {
                 width: 1,
                 height: 1,
                 rgba: vec![0, 0, 0, 0],
@@ -245,7 +398,7 @@ struct Portfolio {
     pending_portrait: PendingPortrait,
     pipelines: Option<Pipelines>,
     matrix_uniform_buffer: Option<wgpu::Buffer>,
-    matrix_bind_group: Option<wgpu::BindGroup>,
+    matrix_glyph_atlas: Option<GpuMatrixGlyphAtlas>,
     portrait_bind_group_layout: Option<wgpu::BindGroupLayout>,
     portrait_uniform_buffer: Option<wgpu::Buffer>,
     text_uniform_buffer: Option<wgpu::Buffer>,
@@ -254,9 +407,11 @@ struct Portfolio {
     timeline_slides: Vec<TimelineSlide>,
     timeline_meshes: Vec<GpuTextMesh>,
     text_overlay: Option<text::TextOverlay>,
+    copyright_notice: String,
     depth: Option<texture::Texture>,
     frame_stats: FrameStats,
     elapsed: f32,
+    matrix_signal: MatrixSignalSchedule,
     section_age: f32,
     slide_progress: f32,
     current_slide: usize,
@@ -275,7 +430,7 @@ impl Portfolio {
             pending_portrait,
             pipelines: None,
             matrix_uniform_buffer: None,
-            matrix_bind_group: None,
+            matrix_glyph_atlas: None,
             portrait_bind_group_layout: None,
             portrait_uniform_buffer: None,
             text_uniform_buffer: None,
@@ -284,9 +439,11 @@ impl Portfolio {
             timeline_slides: Vec::new(),
             timeline_meshes: Vec::new(),
             text_overlay: None,
+            copyright_notice: copyright_notice(),
             depth: None,
             frame_stats: FrameStats::new(),
             elapsed: 0.0,
+            matrix_signal: MatrixSignalSchedule::with_seed(matrix_signal_seed()),
             section_age: 0.0,
             slide_progress: 0.0,
             current_slide: 0,
@@ -418,6 +575,8 @@ impl Portfolio {
                 aspect,
                 (context.surface_config.width as f32 / 15.0).clamp(34.0, 112.0),
             ],
+            // start time, travel duration, normalized column, active flag
+            signal: self.matrix_signal.uniforms(self.elapsed, !reduced),
         };
 
         let reveal = smoothstep(MATRIX_INTRO_END, FACE_REVEAL_END, self.elapsed);
@@ -437,7 +596,7 @@ impl Portfolio {
             placement: portrait_placement(aspect, texture_aspect),
             // The local converter aspect-fits the original portrait into a
             // square canvas. These source-calibrated positions are used only
-            // for subtle shader blink/iris accents; the photograph remains
+            // for subtle shader iris accents; the photograph remains
             // the source of facial identity.
             eyes: [0.402, 0.435, 0.619, 0.433],
         };
@@ -561,6 +720,10 @@ impl Portfolio {
             white_layer.push('█');
         }
 
+        let copyright_layout =
+            copyright_overlay_layout(viewport, context.window.scale_factor() as f32);
+        let copyright_notice = self.copyright_notice.as_str();
+
         let overlay = self
             .text_overlay
             .as_mut()
@@ -596,6 +759,11 @@ impl Portfolio {
                 placement,
             );
         }
+        overlay.add_text(
+            copyright_notice,
+            copyright_overlay_style(copyright_layout.font_size, copyright_layout.line_height),
+            copyright_layout.placement,
+        );
         overlay.prepare(context)
     }
 
@@ -678,12 +846,23 @@ impl Example for Portfolio {
     }
 
     fn init(&mut self, context: &mut RenderContext) -> RenderResult<()> {
+        #[cfg(target_arch = "wasm32")]
+        let validation_scope = context
+            .device
+            .push_error_scope(wgpu::ErrorFilter::Validation);
         mount_browser_canvas(context);
+        dispatch_scene_progress(
+            "matrix",
+            28,
+            "WebGPU device acquired. Preparing the Persian glyph atlas.",
+        );
 
-        let matrix_layout = bind_group::uniform_layout(
+        let matrix_layout = bind_group::uniform_texture_sampler_layout(
             &context.device,
-            Some("matrix uniform layout"),
+            Some("matrix uniform texture layout"),
             wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+            wgpu::ShaderStages::FRAGMENT,
+            wgpu::TextureViewDimension::D2,
         );
         let portrait_layout = bind_group::uniform_texture_sampler_layout(
             &context.device,
@@ -713,6 +892,7 @@ impl Example for Portfolio {
             Some("timeline 3d text shader"),
             include_str!("../assets/shaders/timeline_text.wgsl"),
         );
+        dispatch_scene_progress("face", 44, "Shaders loaded. Uploading Matrix textures.");
 
         let initial_matrix = MatrixUniforms::zeroed();
         let initial_portrait = PortraitUniforms::zeroed();
@@ -729,12 +909,13 @@ impl Example for Portfolio {
             Some("timeline text uniforms"),
             &initial_text,
         );
-        let matrix_bind_group = bind_group::uniform_bind_group(
+        let matrix_glyph_atlas = GpuMatrixGlyphAtlas::new(
             &context.device,
-            Some("matrix uniform bind group"),
+            &context.queue,
             &matrix_layout,
             &matrix_uniform_buffer,
-        );
+        )
+        .map_err(report_renderer_init_error)?;
         let text_bind_group = bind_group::uniform_bind_group(
             &context.device,
             Some("timeline text uniform bind group"),
@@ -746,38 +927,59 @@ impl Example for Portfolio {
             context,
             &portrait_layout,
             &portrait_uniform_buffer,
-        )?;
+        )
+        .map_err(report_renderer_init_error)?;
+        dispatch_scene_progress(
+            "face",
+            60,
+            "Textures ready. Building the timeline geometry.",
+        );
         self.pipelines = Some(Pipelines {
             matrix: create_matrix_pipeline(context, &matrix_layout, &matrix_shader),
             portrait: create_portrait_pipeline(context, &portrait_layout, &portrait_shader),
             text: create_text_pipeline(context, &text_layout, &text_shader),
         });
         self.matrix_uniform_buffer = Some(matrix_uniform_buffer);
-        self.matrix_bind_group = Some(matrix_bind_group);
+        self.matrix_glyph_atlas = Some(matrix_glyph_atlas);
         self.portrait_bind_group_layout = Some(portrait_layout);
         self.portrait_uniform_buffer = Some(portrait_uniform_buffer);
         self.portrait = Some(portrait);
         self.text_uniform_buffer = Some(text_uniform_buffer);
         self.text_bind_group = Some(text_bind_group);
 
-        self.timeline_slides = timeline::load_slides().map_err(RenderError::message)?;
+        self.timeline_slides = timeline::load_slides()
+            .map_err(RenderError::message)
+            .map_err(report_renderer_init_error)?;
         self.timeline_meshes = self
             .timeline_slides
             .iter()
             .map(build_timeline_mesh)
-            .collect::<RenderResult<Vec<_>>>()?
+            .collect::<RenderResult<Vec<_>>>()
+            .map_err(report_renderer_init_error)?
             .iter()
             .map(|mesh| GpuTextMesh::from_mesh(&context.device, mesh))
             .collect();
-        self.text_overlay = Some(text::TextOverlay::with_font_data(
-            context,
-            [FONT_BYTES.to_vec()],
-        )?);
+        dispatch_scene_progress(
+            "timeline",
+            76,
+            "Timeline geometry built. Preparing text shaping.",
+        );
+        self.text_overlay = Some(
+            text::TextOverlay::with_font_data(context, [FONT_BYTES.to_vec()])
+                .map_err(report_renderer_init_error)?,
+        );
         self.depth = Some(texture::Texture::depth(
             &context.device,
             &context.surface_config,
         ));
         self.update_uniforms(context);
+        dispatch_scene_progress(
+            "timeline",
+            90,
+            "Renderer initialized. Waiting for the first frame.",
+        );
+        #[cfg(target_arch = "wasm32")]
+        watch_webgpu_validation_scope(validation_scope);
 
         Ok(())
     }
@@ -943,6 +1145,7 @@ impl Example for Portfolio {
                 self.section_age += dt;
             }
         }
+        self.matrix_signal.update(self.elapsed);
 
         self.consume_portrait_load(context);
         if let Some(screen) = self.cursor_position {
@@ -962,10 +1165,10 @@ impl Example for Portfolio {
             .pipelines
             .as_ref()
             .ok_or_else(|| RenderError::message("portfolio pipelines are not initialized"))?;
-        let matrix_bind_group = self
-            .matrix_bind_group
+        let matrix_glyph_atlas = self
+            .matrix_glyph_atlas
             .as_ref()
-            .ok_or_else(|| RenderError::message("matrix bind group is not initialized"))?;
+            .ok_or_else(|| RenderError::message("matrix glyph atlas is not initialized"))?;
         let text_bind_group = self
             .text_bind_group
             .as_ref()
@@ -988,7 +1191,7 @@ impl Example for Portfolio {
             1.0,
         );
         pass.set_pipeline(&pipelines.matrix);
-        pass.set_bind_group(0, matrix_bind_group, &[]);
+        pass.set_bind_group(0, &matrix_glyph_atlas.bind_group, &[]);
         pass.draw(0..3, 0..1);
 
         if self.elapsed >= MATRIX_INTRO_END - 0.2 {
@@ -1008,11 +1211,9 @@ impl Example for Portfolio {
         }
 
         drop(pass);
-        if self.elapsed >= TIMELINE_START - 0.1
-            && let Some(text_overlay) = self.text_overlay.as_ref()
-        {
+        if let Some(text_overlay) = self.text_overlay.as_ref() {
             let mut text_pass =
-                render_pass::begin_color_load(encoder, Some("filled timeline glyph atlas"), view);
+                render_pass::begin_color_load(encoder, Some("WebGPU text overlay"), view);
             text_overlay.render(&mut text_pass)?;
         }
         self.has_encoded_frame = true;
@@ -1406,6 +1607,48 @@ struct TerminalOverlayLayout {
     cell_advance: f32,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct CopyrightOverlayLayout {
+    placement: text::TextPlacement,
+    font_size: f32,
+    line_height: f32,
+}
+
+fn copyright_overlay_layout(viewport: glam::Vec2, scale_factor: f32) -> CopyrightOverlayLayout {
+    let scale_factor = scale_factor.max(1.0);
+    let logical_viewport = viewport / scale_factor;
+    let horizontal_padding = (logical_viewport.x * 0.04).clamp(16.0, 48.0) * scale_factor;
+    let font_size = if logical_viewport.x < 480.0 {
+        11.0
+    } else {
+        12.0
+    } * scale_factor;
+    let line_height = font_size * 1.45;
+    let bottom_margin = (logical_viewport.y * 0.028).clamp(18.0, 32.0) * scale_factor;
+    CopyrightOverlayLayout {
+        placement: text::TextPlacement {
+            left: horizontal_padding,
+            top: (viewport.y - bottom_margin - line_height).max(0.0),
+            width: (viewport.x - horizontal_padding * 2.0).max(1.0),
+            height: line_height * 1.25,
+            scale: 1.0,
+        },
+        font_size,
+        line_height,
+    }
+}
+
+fn copyright_overlay_style(font_size: f32, line_height: f32) -> text::TextStyle {
+    text::TextStyle {
+        font_size,
+        line_height,
+        color: [255, 255, 255, 210],
+        family: text::TextFamily::Name("Fira Mono"),
+        shaping: text::Shaping::Advanced,
+        align: Some(text::Align::Center),
+    }
+}
+
 fn terminal_overlay_style(
     font_size: f32,
     line_height: f32,
@@ -1655,6 +1898,52 @@ fn mount_browser_canvas(context: &RenderContext) {
 fn mount_browser_canvas(_context: &RenderContext) {}
 
 #[cfg(target_arch = "wasm32")]
+fn watch_webgpu_validation_scope(scope: wgpu::ErrorScopeGuard) {
+    let result = scope.pop();
+    wasm_bindgen_futures::spawn_local(async move {
+        if let Some(error) = result.await {
+            dispatch_renderer_error(&error.to_string());
+        }
+    });
+}
+
+fn report_renderer_init_error(error: RenderError) -> RenderError {
+    #[cfg(target_arch = "wasm32")]
+    dispatch_renderer_error(&error.to_string());
+    error
+}
+
+#[cfg(target_arch = "wasm32")]
+fn dispatch_renderer_error(message: &str) {
+    let detail = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(
+        &detail,
+        &wasm_bindgen::JsValue::from_str("message"),
+        &wasm_bindgen::JsValue::from_str(message),
+    );
+    dispatch_custom_event("pooya:renderer-error", &detail.into());
+}
+
+#[cfg(target_arch = "wasm32")]
+fn dispatch_scene_progress(stage: &str, progress: u8, message: &str) {
+    let detail = js_sys::Object::new();
+    for (key, value) in [
+        ("stage", wasm_bindgen::JsValue::from_str(stage)),
+        (
+            "progress",
+            wasm_bindgen::JsValue::from_f64(f64::from(progress)),
+        ),
+        ("message", wasm_bindgen::JsValue::from_str(message)),
+    ] {
+        let _ = js_sys::Reflect::set(&detail, &wasm_bindgen::JsValue::from_str(key), &value);
+    }
+    dispatch_custom_event("pooya:scene-progress", &detail.into());
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn dispatch_scene_progress(_stage: &str, _progress: u8, _message: &str) {}
+
+#[cfg(target_arch = "wasm32")]
 fn dispatch_renderer_ready(slide_count: usize) {
     let detail = js_sys::Object::new();
     let _ = js_sys::Reflect::set(
@@ -1821,6 +2110,56 @@ mod tests {
     }
 
     #[test]
+    fn matrix_signal_uses_random_30_to_60_second_intervals() {
+        let mut schedule = MatrixSignalSchedule::with_seed(0x1234_5678);
+        let mut previous_start = 0.0;
+
+        for _ in 0..32 {
+            let scheduled_start = schedule.next_start;
+            let interval = scheduled_start - previous_start;
+            assert!(interval >= MATRIX_SIGNAL_MIN_INTERVAL - 0.001);
+            assert!(interval <= MATRIX_SIGNAL_MAX_INTERVAL + 0.001);
+
+            schedule.update(scheduled_start);
+            let active = schedule.uniforms(scheduled_start, true);
+            assert_eq!(active[0], scheduled_start);
+            assert!((0.06..=0.94).contains(&active[2]));
+            assert_eq!(active[3], 1.0);
+            assert_eq!(schedule.uniforms(scheduled_start, false)[3], 0.0);
+            assert_eq!(
+                schedule.uniforms(scheduled_start + MATRIX_SIGNAL_DURATION + 0.01, true)[3],
+                0.0
+            );
+            previous_start = scheduled_start;
+        }
+    }
+
+    #[test]
+    fn copyright_notice_uses_the_current_year_and_stays_bottom_centered() {
+        let notice = copyright_notice();
+        assert_eq!(
+            notice,
+            format!("© {} Pooya Eimandar. All rights reserved.", current_year())
+        );
+
+        for (viewport, scale_factor) in [
+            (glam::Vec2::new(1440.0, 900.0), 1.0),
+            (glam::Vec2::new(780.0, 1688.0), 2.0),
+        ] {
+            let layout = copyright_overlay_layout(viewport, scale_factor);
+            let center = layout.placement.left + layout.placement.width * 0.5;
+            assert!((center - viewport.x * 0.5).abs() < 0.01);
+            assert!(layout.placement.top > viewport.y * 0.8);
+            assert!(layout.placement.top + layout.placement.height <= viewport.y);
+            let style = copyright_overlay_style(layout.font_size, layout.line_height);
+            assert_eq!(style.color, [255, 255, 255, 210]);
+            assert!(matches!(style.align, Some(text::Align::Center)));
+        }
+
+        assert!(include_str!("../index.html").contains("Pooya Eimandar. All rights reserved."));
+    }
+
+    #[test]
     fn regular_filled_overlay_keeps_the_exact_requested_scale_and_flat_palette() {
         assert_eq!(TERMINAL_FONT_SIZE / TERMINAL_BASE_FONT_SIZE, 1.5);
         assert_eq!(TERMINAL_LINE_HEIGHT / TERMINAL_BASE_LINE_HEIGHT, 1.5);
@@ -1859,28 +2198,81 @@ mod tests {
         let portrait = include_str!("../assets/shaders/portrait.wgsl");
 
         assert!(matrix.contains("PERSIAN_LETTER_COUNT: u32 = 32u"));
-        assert!(matrix.contains("array<array<u32, 7>, 32>"));
-        assert!(matrix.contains("persian_bitmap_mask"));
+        assert!(matrix.contains("PERSIAN_ATLAS_COLUMNS: u32 = 8u"));
+        assert!(matrix.contains("PERSIAN_ATLAS_ROWS: u32 = 4u"));
+        assert!(matrix.contains("PERSIAN_GLYPH_RENDER_SCALE: f32 = 2.0"));
+        assert!(matrix.contains("persian_atlas_mask"));
+        assert!(matrix.contains("textureSampleLevel("));
+        assert!(matrix.contains("matrix_signal_glyph"));
+        for mapping in [
+            "case 0u: { return 5u; }",
+            "case 1u: { return 0u; }",
+            "case 2u: { return 29u; }",
+            "case 3u: { return 31u; }",
+            "case 4u: { return 9u; }",
+            "case 5u: { return 15u; }",
+            "case 6u: { return 0u; }",
+            "default: { return 30u; }",
+        ] {
+            assert!(matrix.contains(mapping));
+        }
+        assert!(!matrix.contains("MATRIX_SIGNAL_COLOR"));
+        assert!(!matrix.contains("vec3<f32>(1.0, 0.78, 0.06)"));
+        assert!(!matrix.contains("PERSIAN_GLYPH_ROWS"));
+        assert!(!matrix.contains("persian_bitmap_mask"));
+        assert!(!matrix.contains("&&"));
+        assert!(!matrix.contains("||"));
         assert!(!matrix.contains("PERSIAN_DIGIT_COUNT"));
         assert!(!matrix.contains("persian_word_glyph"));
-        for letter in
-            "ا ب پ ت ث ج چ ح خ د ذ ر ز ژ س ش ص ض ط ظ ع غ ف ق ک گ ل م ن و ه ی".split_whitespace()
-        {
-            assert!(
-                matrix.contains(letter),
-                "rain atlas is missing Persian letter {letter}"
-            );
-        }
 
         assert!(portrait.contains("BINARY_GLYPH_COUNT: u32 = 2u"));
         assert!(portrait.contains("BINARY_GRID_SIZE: vec2<f32> = vec2<f32>(96.0, 132.0)"));
-        assert!(portrait.contains("array<array<u32, 7>, 2>"));
+        assert!(portrait.contains("binary_row_bits"));
         assert!(portrait.contains("binary_bitmap_mask"));
         assert!(portrait.contains("select(0u, 1u, binary_sample >= 0.5)"));
+        assert!(!portrait.contains("BINARY_GLYPH_ROWS"));
+        assert!(!portrait.contains("blink_phase"));
+        assert!(!portrait.contains("eyelids"));
+        assert!(!portrait.contains("&&"));
+        assert!(!portrait.contains("||"));
         assert!(!portrait.contains("PERSIAN_LETTER_COUNT"));
         assert!(!portrait.contains("PERSIAN_GLYPH_ROWS"));
         assert!(!portrait.contains("persian_bitmap_mask"));
         assert!(!portrait.contains("ا ب پ ت ث ج چ ح خ د ذ ر ز ژ"));
+    }
+
+    #[test]
+    fn vazirmatn_matrix_atlas_has_32_populated_glyph_cells() {
+        let font = include_bytes!("../assets/fonts/Vazirmatn-Regular.ttf");
+        assert!(font.len() > 100_000);
+        assert_eq!(&font[..4], &[0, 1, 0, 0]);
+
+        let image =
+            portrait::parse_ktx1_rgba8_asset(MATRIX_GLYPH_ATLAS_BYTES, "vazirmatn-persian.ktx")
+                .unwrap();
+        assert_eq!(
+            (image.width, image.height),
+            (MATRIX_GLYPH_ATLAS_WIDTH, MATRIX_GLYPH_ATLAS_HEIGHT)
+        );
+
+        const CELL_SIZE: usize = 32;
+        let atlas_width = image.width as usize;
+        let atlas_rgba = image.rgba.as_slice();
+        for glyph in 0..32_usize {
+            let cell_x = (glyph % 8) * CELL_SIZE;
+            let cell_y = (glyph / 8) * CELL_SIZE;
+            let covered = (cell_y..cell_y + CELL_SIZE)
+                .flat_map(|y| {
+                    (cell_x..cell_x + CELL_SIZE)
+                        .map(move |x| atlas_rgba[(y * atlas_width + x) * 4 + 3])
+                })
+                .filter(|alpha| *alpha >= 64)
+                .count();
+            assert!(
+                covered >= 18,
+                "glyph atlas cell {glyph} is unexpectedly empty"
+            );
+        }
     }
 
     #[test]
@@ -2144,20 +2536,19 @@ mod tests {
                 WIDTH as f32 / HEIGHT as f32,
                 34.0,
             ],
+            signal: [0.0, MATRIX_SIGNAL_DURATION, 0.5, 0.0],
         };
-        let uniform_layout = bind_group::uniform_layout(
+        let uniform_layout = bind_group::uniform_texture_sampler_layout(
             &device,
-            Some("matrix GPU smoke uniform layout"),
+            Some("matrix GPU smoke uniform texture layout"),
             wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+            wgpu::ShaderStages::FRAGMENT,
+            wgpu::TextureViewDimension::D2,
         );
         let uniform_buffer =
             buffer::uniform_buffer(&device, Some("matrix GPU smoke uniforms"), &uniforms);
-        let uniform_bind_group = bind_group::uniform_bind_group(
-            &device,
-            Some("matrix GPU smoke bind group"),
-            &uniform_layout,
-            &uniform_buffer,
-        );
+        let glyph_atlas =
+            GpuMatrixGlyphAtlas::new(&device, &queue, &uniform_layout, &uniform_buffer).unwrap();
         let module = shader::wgsl_module(
             &device,
             Some("matrix GPU smoke shader"),
@@ -2178,7 +2569,7 @@ mod tests {
                 1.0,
             );
             pass.set_pipeline(&pipeline);
-            pass.set_bind_group(0, &uniform_bind_group, &[]);
+            pass.set_bind_group(0, &glyph_atlas.bind_group, &[]);
             pass.draw(0..3, 0..1);
         }
         encoder.copy_texture_to_buffer(
