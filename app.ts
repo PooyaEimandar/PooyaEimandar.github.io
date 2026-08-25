@@ -33,6 +33,10 @@ interface RendererReadyDetail {
   slideCount?: number;
 }
 
+interface RendererErrorDetail {
+  message?: string;
+}
+
 interface TimelineChangeDetail {
   index?: number;
   count?: number;
@@ -50,8 +54,12 @@ interface SceneProgressDetail {
 const WASM_MODULE_PATH = "./pkg/pooya_portfolio.js";
 const WASM_BINARY_PATH = "./pkg/pooya_portfolio_bg.wasm";
 const TIMELINE_PATH = "./data/timeline.json";
+const BUILD_ID = new URL(import.meta.url).searchParams.get("build") ?? "development";
 const MAX_ENTRIES_PER_SLIDE = 4;
 const RENDERER_TIMEOUT_MS = 30_000;
+const PRODUCTION_HOSTNAMES = new Set(["pooya.ai", "www.pooya.ai"]);
+const WEBGPU_UNAVAILABLE_MESSAGE =
+  "Welcome to website of Pooya Eimandar, it seems your browser doesn't support WebGPU, please update your browser or use another one.";
 
 function requiredElement<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -59,6 +67,12 @@ function requiredElement<T extends HTMLElement>(id: string): T {
     throw new Error(`Required page element #${id} was not found.`);
   }
   return element as T;
+}
+
+function versionedRuntimeUrl(path: string): URL {
+  const url = new URL(path, import.meta.url);
+  url.searchParams.set("build", BUILD_ID);
+  return url;
 }
 
 const page = document.body;
@@ -69,6 +83,8 @@ const loaderPercent = requiredElement<HTMLElement>("loader-percent");
 const progressTrack = requiredElement<HTMLElement>("progress-track");
 const progressBar = requiredElement<HTMLElement>("progress-bar");
 const unsupportedPanel = requiredElement<HTMLElement>("unsupported-panel");
+const unsupportedTitle = requiredElement<HTMLElement>("unsupported-title");
+const unsupportedMessage = requiredElement<HTMLElement>("unsupported-message");
 const errorPanel = requiredElement<HTMLElement>("error-panel");
 const errorMessage = requiredElement<HTMLElement>("error-message");
 const retryButton = requiredElement<HTMLButtonElement>("retry-button");
@@ -205,14 +221,35 @@ function clearRendererTimeout(): void {
   }
 }
 
-function showUnsupportedBrowser(): void {
+function showUnsupportedBrowser(
+  title = "The signal could not start.",
+  message = WEBGPU_UNAVAILABLE_MESSAGE,
+): void {
   clearRendererTimeout();
   page.dataset.renderState = "unsupported";
   page.classList.remove("webgpu-active");
   timelineCopy.removeAttribute("inert");
   loaderPanel.hidden = true;
   errorPanel.hidden = true;
+  unsupportedTitle.textContent = title;
+  unsupportedMessage.textContent = message;
   unsupportedPanel.hidden = false;
+}
+
+function redirectProductionToHttps(): boolean {
+  if (
+    window.isSecureContext
+    || window.location.protocol !== "http:"
+    || !PRODUCTION_HOSTNAMES.has(window.location.hostname)
+  ) {
+    return false;
+  }
+
+  const secureUrl = new URL(window.location.href);
+  secureUrl.protocol = "https:";
+  secureUrl.port = "";
+  window.location.replace(secureUrl);
+  return true;
 }
 
 function showRendererError(error: unknown): void {
@@ -228,6 +265,33 @@ function showRendererError(error: unknown): void {
   const detail = error instanceof Error ? error.message : "Unknown renderer error.";
   errorMessage.textContent = `The accessible timeline is still available below. Technical detail: ${detail}`;
   console.error("WebGPU renderer failed to start:", error);
+}
+
+function rendererError(value: unknown, fallback: string): Error {
+  if (value instanceof Error) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    return new Error(value);
+  }
+  return new Error(fallback);
+}
+
+function handleRendererError(event: Event): void {
+  const detail = (event as CustomEvent<RendererErrorDetail>).detail ?? {};
+  showRendererError(rendererError(detail.message, "WebGPU reported an uncaptured renderer error."));
+}
+
+function handleStartupWindowError(event: ErrorEvent): void {
+  if (!rendererReady && page.dataset.renderState === "loading") {
+    showRendererError(rendererError(event.error ?? event.message, "The browser stopped the WebGPU renderer."));
+  }
+}
+
+function handleStartupRejection(event: PromiseRejectionEvent): void {
+  if (!rendererReady && page.dataset.renderState === "loading") {
+    showRendererError(rendererError(event.reason, "The browser rejected WebGPU initialization."));
+  }
 }
 
 function updateTimelineTranscript(
@@ -297,6 +361,31 @@ function installCanvasLinkActivation(): void {
   });
 }
 
+function handlePrimaryKeyboardAction(event: KeyboardEvent): void {
+  if (
+    !rendererReady
+    || event.key !== "Enter"
+    || event.repeat
+    || event.defaultPrevented
+    || event.altKey
+    || event.ctrlKey
+    || event.metaKey
+  ) {
+    return;
+  }
+
+  const target = event.target;
+  if (
+    target instanceof HTMLElement
+    && (target.isContentEditable || target.closest("a, button, input, select, textarea"))
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  wasmBindings?.reveal_or_advance_timeline?.();
+}
+
 function handleRendererReady(event: Event): void {
   const detail = (event as CustomEvent<RendererReadyDetail>).detail ?? {};
   if (typeof detail.slideCount === "number" && Number.isFinite(detail.slideCount)) {
@@ -340,25 +429,24 @@ function handleSceneProgress(event: Event): void {
 }
 
 async function initialiseRenderer(): Promise<void> {
+  if (redirectProductionToHttps()) {
+    return;
+  }
+
+  if (!window.isSecureContext) {
+    showUnsupportedBrowser(
+      "A secure connection is required.",
+      "WebGPU is available only in a secure context. Open this website over HTTPS and try again.",
+    );
+    return;
+  }
+
   const navigatorWithGpu = navigator as Navigator & {
-    gpu?: { requestAdapter?: () => Promise<unknown | null> };
+    gpu?: unknown;
   };
   if (!("gpu" in navigatorWithGpu) || !navigatorWithGpu.gpu) {
     showUnsupportedBrowser();
     return;
-  }
-
-  if (typeof navigatorWithGpu.gpu.requestAdapter === "function") {
-    try {
-      const adapter = await navigatorWithGpu.gpu.requestAdapter();
-      if (!adapter) {
-        showUnsupportedBrowser();
-        return;
-      }
-    } catch {
-      showUnsupportedBrowser();
-      return;
-    }
   }
 
   page.dataset.renderState = "loading";
@@ -374,32 +462,30 @@ async function initialiseRenderer(): Promise<void> {
   }, RENDERER_TIMEOUT_MS);
 
   try {
-    const moduleUrl = new URL(WASM_MODULE_PATH, import.meta.url).href;
+    const moduleUrl = versionedRuntimeUrl(WASM_MODULE_PATH).href;
     const bindings = (await import(moduleUrl)) as WasmBindings;
     if (typeof bindings.default !== "function") {
       throw new Error("The generated WebAssembly module has no default initializer.");
     }
 
     wasmBindings = bindings;
-    updateLoadStage("face", 42, "Compiling the shaders and resolving the digital likeness.");
+    updateLoadStage("matrix", 16, "Starting the Rust/WebGPU renderer.");
     await bindings.default({
-      module_or_path: new URL(WASM_BINARY_PATH, import.meta.url),
+      module_or_path: versionedRuntimeUrl(WASM_BINARY_PATH),
     });
-
-    if (!rendererReady) {
-      page.classList.add("webgpu-active");
-      timelineCopy.setAttribute("inert", "");
-      updateLoadStage("timeline", 78, "The face is online. Streaming timeline geometry.");
-      applySystemMotionPreference();
-    }
+    applySystemMotionPreference();
   } catch (error) {
     showRendererError(error);
   }
 }
 
 window.addEventListener("pooya:renderer-ready", handleRendererReady);
+window.addEventListener("pooya:renderer-error", handleRendererError);
 window.addEventListener("pooya:timeline-change", handleTimelineChange);
 window.addEventListener("pooya:scene-progress", handleSceneProgress);
+window.addEventListener("error", handleStartupWindowError);
+window.addEventListener("unhandledrejection", handleStartupRejection);
+window.addEventListener("keydown", handlePrimaryKeyboardAction);
 
 retryButton.addEventListener("click", () => window.location.reload());
 motionQuery.addEventListener("change", applySystemMotionPreference);
@@ -407,7 +493,7 @@ motionQuery.addEventListener("change", applySystemMotionPreference);
 const currentYear = new Date().getFullYear().toString();
 copyrightYear.dateTime = currentYear;
 copyrightYear.textContent = currentYear;
-updateTimelineTranscript(0, "1986–2007", "Origins");
+updateTimelineTranscript(0, "1987–2007", "Origins");
 
 void loadTimelineData().catch((error: unknown) => {
   console.warn("The canonical timeline data could not be validated; using the semantic HTML copy.", error);

@@ -20,35 +20,39 @@ const GL_SRGB8_ALPHA8: u32 = 0x8C43;
 const MAX_DIMENSION: u32 = 4096;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PortraitImage {
+pub struct RgbaKtxImage {
     pub width: u32,
     pub height: u32,
     pub rgba: Vec<u8>,
 }
 
-impl PortraitImage {
+impl RgbaKtxImage {
     pub fn aspect_ratio(&self) -> f32 {
         self.width as f32 / self.height.max(1) as f32
     }
 }
 
-pub fn parse_ktx1_rgba8(bytes: &[u8]) -> RenderResult<PortraitImage> {
+pub fn parse_ktx1_rgba8(bytes: &[u8]) -> RenderResult<RgbaKtxImage> {
+    parse_ktx1_rgba8_asset(bytes, "pooya.ktx")
+}
+
+pub fn parse_ktx1_rgba8_asset(bytes: &[u8], asset_name: &str) -> RenderResult<RgbaKtxImage> {
     if bytes.len() < KTX1_HEADER_SIZE + 4 {
-        return Err(RenderError::message(
-            "pooya.ktx is shorter than a KTX1 header",
-        ));
+        return Err(RenderError::message(format!(
+            "{asset_name} is shorter than a KTX1 header"
+        )));
     }
     if bytes[..KTX1_IDENTIFIER.len()] != KTX1_IDENTIFIER {
-        return Err(RenderError::message(
-            "pooya.ktx has an invalid KTX1 identifier",
-        ));
+        return Err(RenderError::message(format!(
+            "{asset_name} has an invalid KTX1 identifier"
+        )));
     }
 
     let endianness = read_u32(bytes, 12)?;
     if endianness != KTX_ENDIAN_LITTLE {
-        return Err(RenderError::message(
-            "pooya.ktx must use little-endian KTX1 fields",
-        ));
+        return Err(RenderError::message(format!(
+            "{asset_name} must use little-endian KTX1 fields"
+        )));
     }
     let gl_type = read_u32(bytes, 16)?;
     let gl_type_size = read_u32(bytes, 20)?;
@@ -61,9 +65,9 @@ pub fn parse_ktx1_rgba8(bytes: &[u8]) -> RenderResult<PortraitImage> {
         || gl_internal_format != GL_SRGB8_ALPHA8
         || gl_base_internal_format != GL_RGBA
     {
-        return Err(RenderError::message(
-            "pooya.ktx must be uncompressed sRGB RGBA8",
-        ));
+        return Err(RenderError::message(format!(
+            "{asset_name} must be uncompressed sRGB RGBA8"
+        )));
     }
 
     let width = read_u32(bytes, 36)?;
@@ -75,50 +79,52 @@ pub fn parse_ktx1_rgba8(bytes: &[u8]) -> RenderResult<PortraitImage> {
     let key_value_bytes = read_u32(bytes, 60)? as usize;
     if width == 0 || height == 0 || width > MAX_DIMENSION || height > MAX_DIMENSION {
         return Err(RenderError::message(format!(
-            "pooya.ktx has invalid dimensions {width}x{height}",
+            "{asset_name} has invalid dimensions {width}x{height}",
         )));
     }
     if depth != 0 || array_elements != 0 || faces != 1 || mip_levels != 1 {
-        return Err(RenderError::message(
-            "pooya.ktx must contain one 2D face and exactly one mip level",
-        ));
+        return Err(RenderError::message(format!(
+            "{asset_name} must contain one 2D face and exactly one mip level"
+        )));
     }
     if !key_value_bytes.is_multiple_of(4) {
-        return Err(RenderError::message(
-            "pooya.ktx metadata must be aligned to four bytes",
-        ));
+        return Err(RenderError::message(format!(
+            "{asset_name} metadata must be aligned to four bytes"
+        )));
     }
 
     let level_header = KTX1_HEADER_SIZE
         .checked_add(key_value_bytes)
-        .ok_or_else(|| RenderError::message("pooya.ktx metadata offset overflowed"))?;
+        .ok_or_else(|| RenderError::message(format!("{asset_name} metadata offset overflowed")))?;
     let image_start = level_header
         .checked_add(4)
-        .ok_or_else(|| RenderError::message("pooya.ktx image offset overflowed"))?;
+        .ok_or_else(|| RenderError::message(format!("{asset_name} image offset overflowed")))?;
     let image_size = read_u32(bytes, level_header)? as usize;
     let expected_size = (width as usize)
         .checked_mul(height as usize)
         .and_then(|pixels| pixels.checked_mul(4))
-        .ok_or_else(|| RenderError::message("pooya.ktx dimensions overflowed RGBA storage"))?;
+        .ok_or_else(|| {
+            RenderError::message(format!("{asset_name} dimensions overflowed RGBA storage"))
+        })?;
     if image_size != expected_size {
         return Err(RenderError::message(format!(
-            "pooya.ktx level is {image_size} bytes; expected {expected_size}",
+            "{asset_name} level is {image_size} bytes; expected {expected_size}",
         )));
     }
     let image_end = image_start
         .checked_add(image_size)
-        .ok_or_else(|| RenderError::message("pooya.ktx image range overflowed"))?;
+        .ok_or_else(|| RenderError::message(format!("{asset_name} image range overflowed")))?;
     let rgba = bytes
         .get(image_start..image_end)
-        .ok_or_else(|| RenderError::message("pooya.ktx image payload is truncated"))?
+        .ok_or_else(|| RenderError::message(format!("{asset_name} image payload is truncated")))?
         .to_vec();
     if image_end != bytes.len() {
-        return Err(RenderError::message(
-            "pooya.ktx must contain exactly one image payload",
-        ));
+        return Err(RenderError::message(format!(
+            "{asset_name} must contain exactly one image payload"
+        )));
     }
 
-    Ok(PortraitImage {
+    Ok(RgbaKtxImage {
         width,
         height,
         rgba,
@@ -128,14 +134,14 @@ pub fn parse_ktx1_rgba8(bytes: &[u8]) -> RenderResult<PortraitImage> {
 fn read_u32(bytes: &[u8], offset: usize) -> RenderResult<u32> {
     let encoded = bytes
         .get(offset..offset + 4)
-        .ok_or_else(|| RenderError::message("pooya.ktx header is truncated"))?;
+        .ok_or_else(|| RenderError::message("KTX1 header is truncated"))?;
     Ok(u32::from_le_bytes(encoded.try_into().map_err(|_| {
-        RenderError::message("pooya.ktx field width is invalid")
+        RenderError::message("KTX1 field width is invalid")
     })?))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn load_default_portrait() -> RenderResult<PortraitImage> {
+pub fn load_default_portrait() -> RenderResult<RgbaKtxImage> {
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let bytes = std::fs::read(manifest_dir.join(PORTRAIT_KTX_URL)).map_err(|error| {
         RenderError::message(format!("failed to read {PORTRAIT_KTX_URL}: {error}"))
@@ -144,7 +150,7 @@ pub fn load_default_portrait() -> RenderResult<PortraitImage> {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub async fn load_default_portrait() -> RenderResult<PortraitImage> {
+pub async fn load_default_portrait() -> RenderResult<RgbaKtxImage> {
     use wasm_bindgen::JsCast;
     use wasm_bindgen_futures::JsFuture;
 

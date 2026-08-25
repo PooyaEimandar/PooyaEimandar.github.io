@@ -8,8 +8,7 @@
   <meta name="color-scheme" content="dark">
   <meta name="description"
     content="Pooya Eimandar's timeline, spanning game engines, graphics, publishing, teaching, cloud gaming, and technology leadership.">
-  <meta name="keywords"
-    content="Pooya Eimandar, Rust, WebGPU, graphics programming, game engine, Wolf Engine, PlayPod, Arium">
+  <meta name="keywords" content="Pooya Eimandar, پویا ایماندار, پویا ایمان دار">
   <meta name="author" content="Pooya Eimandar">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Pooya Eimandar — Timeline in WebGPU">
@@ -17,7 +16,7 @@
   <meta property="og:url" content="https://pooya.ai/">
   <link rel="canonical" href="https://pooya.ai/">
   <link rel="stylesheet" href="assets/css/site.css">
-  <title>Pooya Eimandar — Rust / WebGPU Timeline</title>
+  <title>Pooya Eimandar's Personal Website</title>
   <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -38,7 +37,7 @@
 
   <header class="site-header" aria-label="Site header">
     <a class="wordmark" href="#top" aria-label="Home">
-      <span class="wordmark-name">$ Stay Hungry, Stay Foolish</span>
+      <span class="wordmark-name">Stay Hungry, Stay Foolish</span>
     </a>
 
     <nav class="primary-nav" aria-label="Primary navigation">
@@ -86,7 +85,7 @@
       <section class="unsupported-panel" id="unsupported-panel" aria-labelledby="unsupported-title" hidden>
         <p class="eyebrow">WebGPU unavailable</p>
         <h2 id="unsupported-title">The signal could not start.</h2>
-        <p>
+        <p id="unsupported-message">
           Welcome to website of Pooya Eimandar, it seems your browser doesn't support WebGPU, please update your browser
           or use another one.
         </p>
@@ -100,7 +99,7 @@
       </section>
 
       <div class="timeline-transcript" aria-live="polite" aria-atomic="true">
-        <p id="timeline-year">1986–2007</p>
+        <p id="timeline-year">1987–2007</p>
         <h2 id="timeline-title">Origins</h2>
         <p id="timeline-description">2 milestones — Born · First strokes</p>
       </div>
@@ -108,7 +107,7 @@
 
     <section class="timeline-copy" id="timeline-copy" aria-labelledby="timeline-copy-title">
       <header class="timeline-copy-header">
-        <p class="eyebrow">1986 — 2026</p>
+        <p class="eyebrow">1987 — 2026</p>
         <h2 id="timeline-copy-title" aria-label="Pooya's Timeline"><span aria-hidden="true">pooya@timeline:~$ history
             --all</span></h2>
         <p>Thirty-seven milestones across graphics, games, publishing, teaching, technology leadership, and cloud
@@ -117,12 +116,12 @@
 
       <section class="timeline-group" aria-labelledby="origins-title">
         <header>
-          <p>1986–2007</p>
+          <p>1987–2007</p>
           <h3 id="origins-title">Origins</h3>
         </header>
         <ol>
-          <li data-milestone data-id="born" data-year="1986">
-            <time datetime="1986">1986</time>
+          <li data-milestone data-id="born" data-year="1987">
+            <time datetime="1987">1987</time>
             <div>
               <h4>Born</h4>
               <p>Born on January 7.</p>
@@ -483,14 +482,14 @@
 
   <footer class="site-footer">
     <p>Built with Rust, Sib, and WebGPU.</p>
-    <p>© <time id="copyright-year"></time> Pooya Eimandar</p>
+    <p>© <time id="copyright-year"></time> Pooya Eimandar. All rights reserved.</p>
   </footer>
 
   <noscript>
     <div class="noscript-message">JavaScript is required for the WebGPU scene. Pooya's complete timeline remains
       available on this page.</div>
   </noscript>
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?build=__BUILD_ID__"></script>
 </body>
 
 </html>

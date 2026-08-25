@@ -51,12 +51,13 @@ jobs:
         run: |
           rm -rf _site
           mkdir -p _site/data _site/pkg _site/assets/css _site/assets/fonts _site/assets/textures
-          cp index.html app.js THIRD_PARTY_NOTICES.md LICENSE _site/
+          cp app.js THIRD_PARTY_NOTICES.md LICENSE _site/
+          sed "s/__BUILD_ID__/${GITHUB_SHA}/g" index.html > _site/index.html
           cp assets/css/site.css _site/assets/css/
           cp data/timeline.json _site/data/
           cp pkg/pooya_portfolio.js pkg/pooya_portfolio_bg.wasm _site/pkg/
           cp assets/textures/pooya.ktx _site/assets/textures/
-          cp assets/fonts/FiraMono-LICENSE.txt _site/assets/fonts/
+          cp assets/fonts/FiraMono-LICENSE.txt assets/fonts/Vazirmatn-LICENSE.txt _site/assets/fonts/
           touch _site/.nojekyll
           if find _site -type f \( -iname '*.jpeg' -o -iname '*.jpg' -o -iname '*.gltf' -o -iname '*.bin' -o -iname '*.wgsl' -o -iname '*.ttf' \) -print -quit | grep -q .; then
             echo "Source portraits and embedded renderer inputs must not be deployed."

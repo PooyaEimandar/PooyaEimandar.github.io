@@ -207,7 +207,7 @@ fn build_terminal_stream(
 
     lines.extend([
         TerminalLine::plain("|"),
-        TerminalLine::plain("| $ input.listen \"Click/Touch to continue\""),
+        TerminalLine::plain("| $ input.listen Click/Touch/⏎ to continue"),
         TerminalLine::plain("| > READY"),
     ]);
     finish_terminal(lines)
@@ -381,7 +381,17 @@ mod tests {
             assert!(slide.terminal.starts_with("| $ pooya.timeline"));
             assert!(slide.terminal.ends_with("| > READY"));
             assert!(!slide.summary.is_empty());
-            assert!(slide.terminal.is_ascii());
+            assert!(
+                slide
+                    .terminal
+                    .chars()
+                    .all(|character| character.is_ascii() || character == '⏎')
+            );
+            assert!(
+                slide
+                    .terminal
+                    .contains("| $ input.listen Click/Touch/⏎ to continue")
+            );
             assert_eq!(slide.line_count(), slide.terminal.lines().count());
             assert!(
                 !slide.terminal.contains("..."),
