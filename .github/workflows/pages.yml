@@ -1,0 +1,80 @@
+name: Build and deploy the WebGPU portfolio
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the site
+        uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install browser-build dependencies
+        run: npm ci
+
+      - name: Check and compile the TypeScript bridge
+        run: npm run build
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install the matching wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --version 0.2.126 --locked
+
+      - name: Build the Rust WebAssembly renderer
+        run: scripts/build-wasm.sh --release
+
+      - name: Stage approved runtime files
+        run: |
+          rm -rf _site
+          mkdir -p _site/data _site/pkg _site/assets/css _site/assets/fonts _site/assets/textures
+          cp index.html app.js THIRD_PARTY_NOTICES.md LICENSE _site/
+          cp assets/css/site.css _site/assets/css/
+          cp data/timeline.json _site/data/
+          cp pkg/pooya_portfolio.js pkg/pooya_portfolio_bg.wasm _site/pkg/
+          cp assets/textures/pooya.ktx _site/assets/textures/
+          cp assets/fonts/FiraMono-LICENSE.txt _site/assets/fonts/
+          touch _site/.nojekyll
+          if find _site -type f \( -iname '*.jpeg' -o -iname '*.jpg' -o -iname '*.gltf' -o -iname '*.bin' -o -iname '*.wgsl' -o -iname '*.ttf' \) -print -quit | grep -q .; then
+            echo "Source portraits and embedded renderer inputs must not be deployed."
+            exit 1
+          fi
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

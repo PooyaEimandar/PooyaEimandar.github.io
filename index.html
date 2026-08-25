@@ -1,209 +1,496 @@
-<!--
-	Project		 : https://PooyaEimandar.github.io Copyright (c) Pooya Eimandar
-	File Name        : index.html
-	File Description : the home page of blog
-	Last modified by : Pooya Eimandar on 2th Feb, 2022
-	Comment          :
--->
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
+
 <head>
-    <meta charset="utf-8" />
-    <title>Home | Pooya Eimandar</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="keywords" content="pooya eimandar, pooya imandar, پویا ایماندار , پویا ایمان دار ,  ایماندار , ایمان دار , پویا">	
-    <meta name="author" content="Pooya Eimandar">
-    <meta name="copyright" content="Pooya Eimandar">
-    <link href="css/bootstrap.min.css" rel="stylesheet">
-    <link href="css/site.css" rel="stylesheet" />
-    <script src="app.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#020806">
+  <meta name="color-scheme" content="dark">
+  <meta name="description"
+    content="Pooya Eimandar's timeline, spanning game engines, graphics, publishing, teaching, cloud gaming, and technology leadership.">
+  <meta name="keywords"
+    content="Pooya Eimandar, Rust, WebGPU, graphics programming, game engine, Wolf Engine, PlayPod, Arium">
+  <meta name="author" content="Pooya Eimandar">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Pooya Eimandar — Timeline in WebGPU">
+  <meta property="og:description" content="An interactive real-time timeline rendered with Rust and WebGPU.">
+  <meta property="og:url" content="https://pooyaeimandar.github.io/">
+  <link rel="canonical" href="https://pooyaeimandar.github.io/">
+  <link rel="stylesheet" href="assets/css/site.css">
+  <title>Pooya Eimandar — Rust / WebGPU Timeline</title>
+  <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Person",
+        "name": "Pooya Eimandar",
+        "url": "https://pooyaeimandar.github.io/",
+        "sameAs": [
+          "https://github.com/PooyaEimandar",
+          "https://www.youtube.com/channel/UC5XZoDB5YHd07WSWeMAYyZQ"
+        ],
+        "knowsAbout": ["Rust", "WebGPU", "Real-time graphics", "Game engines", "Cloud gaming"]
+      }
+    </script>
 </head>
-<body class="body">
-    <div class="container">
 
-        <!--Nav bar-->
-        <nav role="navigation" class="navbar navbar-inverse">
-            <div class="navbar-header">
-                <button type="button" data-target="#navbarCollapse" data-toggle="collapse" class="navbar-toggle">
-                    <span class="sr-only">Toggle navigation</span>
-                    <span class="icon-bar"></span>
-                    <span class="icon-bar"></span>
-                    <span class="icon-bar"></span>
-                </button>
-                <a class="bold navbar-brand" href="https://github.com/PooyaEimandar" target="_blank">Pooya @ GitHub</a>
-            </div>
-            <div id="navbarCollapse" class="collapse navbar-collapse">
-                <ul class="nav navbar-nav">
-                    <li class="active"><a class="bold" href="http://pooyaeimandar.github.io/">Home</a></li>
-                    <li><a class="bold" href="https://pooyaeimandar.github.io/PooyaEimandar-CV.pdf">CV</a></li>
-                    <li><a class="bold" href="#" data-toggle="modal" data-target="#contactModal">Contact</a></li>
-                </ul>
-                <!--<form role="search" class="navbar-form navbar-left">
-                    <div class="form-group">
-                        <input type="text" placeholder="Search" class="form-control">
-                    </div>
-                </form>-->
-                <!--right nav bar-->
-                <img class="nav navbar-nav navbar-right" src="imgs/Pooya_48_48.jpg" width="48" height="45" alt="Pooya" frameborder="0" scrolling="no">
-                <ul class="nav navbar-nav navbar-right">
-                    <li class="dropdown">
-                        <!--Follow me on socials-->
-                        <a class="bold dropdown-toggle" data-toggle="dropdown" href="#">Follow me<b class="caret"></b></a>
-                        <ul role="menu" class="dropdown-menu">
-                            <li><a href="https://www.linkedin.com/in/pooyaeimandar" target="_blank"><strong>LinkedIn</strong></a></li>
-                            <li><a href="https://www.youtube.com/channel/UC5XZoDB5YHd07WSWeMAYyZQ" target="_blank"><strong>YouTube</strong></a></li>
-                            <li><a href="https://vimeo.com/channels/bazipardaz" target="_blank"><strong>BaziPardaz Vimeo Channel</strong></a></li>
-                            <li><a href="https://instagram.com/wolf_engine" target="_blank"><strong>Instagram</strong></a></li>
-                        </ul>
-                    </li>
-                </ul>
-            </div>
-        </nav>
-   
-        <!--Main container-->
-        <div class="row">
-            <div class="col-md-6"><p class="fade"><a href="#" data-toggle="modal" data-target="#timelineModal">Timeline</a></p></div>
-            <div class="col-md-6"><p class="fade"><a href="https://github.com/WolfSource/WolfEngine" target="_blank">Wolf Engine</a></p></div>
+<body data-render-state="booting">
+  <a class="skip-link" href="#top">Skip to the interactive timeline</a>
+
+  <header class="site-header" aria-label="Site header">
+    <a class="wordmark" href="#top" aria-label="Home">
+      <span class="wordmark-name">$ Stay Hungry, Stay Foolish</span>
+    </a>
+
+    <nav class="primary-nav" aria-label="Primary navigation">
+      <a href="https://github.com/PooyaEimandar" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://www.youtube.com/channel/UC5XZoDB5YHd07WSWeMAYyZQ" target="_blank"
+        rel="noopener noreferrer">YouTube</a>
+      <a href="mailto:mail@pooya.ai">Contact</a>
+    </nav>
+  </header>
+
+  <main id="main-content">
+    <section class="experience" id="top" tabindex="-1" aria-labelledby="hero-title">
+      <div class="scene" id="scene-mount"></div>
+      <div class="scene-atmosphere" aria-hidden="true"></div>
+      <div class="scene-grid" aria-hidden="true"></div>
+
+      <div class="hero-intro">
+        <p class="eyebrow"><span aria-hidden="true">boot://</span> Rust + Sib + WebGPU</p>
+        <h1 id="hero-title"><span aria-hidden="true">pooya@portfolio:~$ </span>./timeline --realtime</h1>
+        <p class="hero-summary">
+          <span aria-hidden="true">&gt; </span>Loading Pooya's timeline
+        </p>
+      </div>
+
+      <section class="loader-panel" id="loader-panel" aria-labelledby="loader-title">
+        <div class="loader-heading">
+          <p class="eyebrow">Signal sequence</p>
+          <p class="loader-percent" id="loader-percent" aria-hidden="true">00%</p>
         </div>
-
-        <!--footer-->
-        <nav role="navigation" class="navbar navbar-default navbar-fixed-bottom" style="opacity:0.9;">
-            <div class="container-fluid">
-                <!-- Brand and toggle get grouped for better mobile display -->
-                <div class="navbar-header">
-                <button type="button" data-target="#navbarCollapse" data-toggle="collapse" class="navbar-toggle">
-                    <span class="sr-only">Toggle navigation</span>
-                    <span class="icon-bar"></span>
-                    <span class="icon-bar"></span>
-                    <span class="icon-bar"></span>
-                </button>
-                <a class="bold navbar-brand" href="https://github.com/PooyaEimandar" target="_blank">Pooya @ GitHub</a>
-            </div>
-                <!-- Collection of nav links and other content for toggling -->
-                <div id="navbarCollapse" class="collapse navbar-collapse">
-                    <ul class="nav navbar-nav">
-                        <li><a href="https://www.linkedin.com/in/pooyaeimandar" target="_blank">LinkedIn</a></li>
-                        <li><a href="https://www.youtube.com/channel/UC5XZoDB5YHd07WSWeMAYyZQ" target="_blank">YouTube</a></li>
-                        <li><a href="https://vimeo.com/channels/bazipardaz" target="_blank">BaziPardaz Vimeo Channel</a></li>
-                        <li><a href="https://instagram.com/wolf_engine" target="_blank">Instagram</a></li>
-
-                    </ul>
-                    <!--<ul class="nav navbar-nav navbar-right">
-                        <li><a href="#top"><strong>Top</strong></a></li>
-                    </ul>-->
-                </div>
-            </div>
-        </nav>
-
-    </div>
-
-    <!--Contact modal-->
-    <div id="contactModal" class="modal fade bs-example-modal-lg" tabindex="-1" role="dialog">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                    <h4 class="modal-title">Contacts</h4>
-                </div>
-                <div class="modal-body">
-                    <p class="pbold">Email : Pooya{dot}Eimandar{at}gmail{dot}com</p>
-                    <p class="pbold">Skype : Pooya Eimandar</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-                </div>
-            </div>
+        <h2 id="loader-title">Entering the matrix</h2>
+        <p class="loader-message" id="loader-message" aria-live="polite" aria-atomic="true">
+          Checking this browser's graphics capabilities.
+        </p>
+        <div class="progress-track" id="progress-track" role="progressbar" aria-label="Experience loading progress"
+          aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span id="progress-bar"></span>
         </div>
-    </div>
-    <!--Timeline modal-->
-    <div id="timelineModal" class="modal fade bs-example-modal-lg" tabindex="-1" role="dialog">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-                    <h4 class="modal-title">Pooya's Timeline</h4>
-                </div>
-                <div class="modal-body">
-                    <img src="imgs/PooyaEimandar.jpg" width="256" height="256" class="img-circle" alt="Circular Image">
-                    <ul style="font-size:medium; text-align:left">
-                        <li><strong>1986 : </strong>Born on 7th January</li>
-                        <li><strong>1992 : </strong>Started learning to swim</li>
-                        <li><strong>2000 : </strong>Joined to Waterpolo team club of <a href="http://en.wikipedia.org/wiki/Shahid_Shiroudi_Stadium" target="_blank">Shahid Shiroudi Stadium</a> as a goal keeper</li>
-                        <li><strong>2006 : </strong>Programmed the first hobby game(Snake) with C</li>
-                        <li><strong>2007 : </strong>Programmed The Whist(Card games) with C#</li>
-                        <li>
-                            <strong>2008 : </strong>Graduated in computer science and hardware engineering degree from <a href="http://shomal.ac.ir/en/" target="_blank">Shomal university</a>
-                            <ul>
-                                Thesis :
-                                <li>Simulating "CPU & Mainboard" with FPGA</li>
-                                <li>Simulating "Lift Truck Robot" with Atmel micro controller</li>
-                            </ul>
-                        </li>
-                        <li><strong>2008 : </strong>Started develping his first in-house game engine named "<a href="https://persianengine.codeplex.com/" target="_blank">Persian Engine"</a></li>
-                        <li><strong>2009 : </strong>Joined Safa company dev team as a Senior Silverlight Developer (Project Sara 8).</li>
-                        <li>
-                            <strong>2010 : </strong>
-                            Founded <a href="https://vimeo.com/channels/bazipardaz" target="_blank">BaziPardaz</a> game studio, which is an independent copmany,
-                            mainly focused on developing software, simulations, interactive games and game engine. 
-                            <ul>
-                                <li><a href="https://facebook.com/bazipardaz" target="_blank">BaziPardaz Facebook page</a></li>
-                                <li><a href="https://vimeo.com/channels/bazipardaz" target="_blank">BaziPardaz vimeo channel</a></li>
-                            </ul>
-                        </li>
-                        <li><strong>2010 : </strong>Started prototype of <a href="https://vimeo.com/106925703" target="_blank">"The Land"</a> which was a third person shooter game achieved by Persian Engine.</li>
-                        <li><strong>2011 : </strong>Persian Engine nominated for best technology of computer games in International Digital Media Festival and Fair (Tehran) 
-                            and won the prize.
-                        </li>
-                        <li><strong>2012 : </strong>Started porting Persian Engine to Silverlight 5 platform.</li>
-                        <li><strong>2012 : </strong>Started interactive game named "<a href="http://vimeo.com/96698402" target="_blank">The Master Chef</a>" in BaziPardaz based on Kinect and Persian engine</li>
-                        <li><strong>2013 : </strong>Authored <a href="https://www.packtpub.com/game-development/directx-111-game-programming" target="_blank">DirectX 11.1 game programming</a>. 
-                            The book covers, a step-by-step guide to create 3D applications and games and shows the setting up of a 3D multithreaded framework for metro style app using C++/CX and DirectX 11.1.
-                        </li>
-                        <li><strong>2013 : </strong>Published an article about Directx Graphics Diagnostic on <a href="https://www.gamedev.net/page/resources/_/technical/directx-and-xna/directx-graphics-diagnostic-r3380" target="_blank">GameDev</a> 
-                            <a href="https://hub.packtpub.com/directx-graphics-diagnostic/" target="_blank">PackT Articles</a></li>
-                        <li><strong>2013 : </strong>Launched a <a href="http://directx11-1-gameprogramming.azurewebsites.net/" target="_blank">dedicated blog for book "DirectX 11.1 Game Programming"</a>. He provided a blog for those programmers who have 
-                            a good knowledge about DirectX and want to excel in the new features of DirectX 11.x.
-                        </li>
-                        <li><strong>2013 : </strong>Started simulating an online social city <a href="https://vimeo.com/channels/bazipardaz/80917932" target="_blank">City2</a> with Persian Engine (The web version, based on Silverlight 5 for browsers).</li>
-                        <li><strong>2013 : </strong>Became lecturer at the <a href="http://www.nfcg-uast.ac.ir/?page_id=373" target="_blank"> Iran University of Applied Science and Technology National Foundation of Computer Games</a></li>
-                        <li><strong>2014 : </strong>Became lecturer at the <a href="http://www.irangdi.com/" target="_blank"> Iran Game Development Institute</a></li>
-                        <li><strong>2014 : </strong>Launched a project "<a href="http://learningmoderncpp.codeplex.com/" target="_blank">Learning Modern C++ for Game Programmers</a>". This is a totally free open source project devoted to teaching you to 
-                            program in Modern C++, whether you've had any prior experience programming or not. This is studying project hosted for self studying modern C++beside game programming, becoming expert programmer won't happen overnight, 
-                            so be patient and keep it rock.
-                        </li>
-                        <li><strong>2014 : </strong>Published an article about "<a href="https://www.slideshare.net/PooyaEimandar/ss-38769072" target="_blank">Gaming in healthcare</a>" on the first conference of game & medical health - Game@Behdasht.gov.ir .</li>
-                        <li><strong>2014 : </strong>Joined <a href="http://igdf.ir/News/YXnvBTHD35o=" target="_blank">IGDF 2014</a>'s jury panel for the best computer games technology.</li>             
-                        <li><strong>2014 : </strong>Published the final version of <a href="https://persianengine.codeplex.com/" target="_blank">Persian Engine on codeplex</a>.
-                            <ul>
-                                <li><a href="https://vimeo.com/79195038">The editor of Persian Engine</a></li>
-                                <li><a href="https://vimeo.com/79210871">The animation mixer of Persian Engine</a></li>
-                                <li><a href="https://vimeo.com/83172048">Persian Engine & Softimage FaceRobot</a></li>
-                            </ul>
-                        </li>
-                        <li><strong>2014 : </strong>Started developing a new tools for real time Playout & CG editor based on MOS protocol.
-                            Implemented with C++, ffmpeg and pure DirectX 11.1 on windows 8.1 and it can be use on Windows 7 (with platform update) and the later versions, also integrated with BlackMagic Decklink cards for real time capturing, 
-                            cg editing and playbacking HD/SD medias.
-                            <ul>
-                               <li><a href="https://www.youtube.com/watch?v=EZSdEjBvuGY">Watch the video of first vesion of Playout on YouTube</a></li>
-                            </ul>
-                        </li>
-                        <li><strong>2015 : </strong>Started the next generation of his in-house game engine named <a href="https://opensourcelibs.com/lib/wolf.engine" target="_blank"> Wolf Engine</a>.</li>                 
-                        <li><strong>2016 : </strong>CTO at <a href="https://github.com/WolfSource/WolfEngine" target="_blank"> Wolf Source </a>. Wolf Source is passionate about 3D Graphics Technology working on games, game engine, 3D tools and TV broadcasting tools.</li>					
-			<li><strong>2016 : </strong>Technical reviewer of the book <a href="https://www.packtpub.com/game-development/game-programming-using-qt" target="_blank"> "Game Programming Using Qt: Beginner's Guide"</a>. by Witold Wysota and Lorenz Haas - published by PackT. This is my second project with PackT after my book  <a href="https://www.packtpub.com/game-development/directx-111-game-programming" target="_blank"> "DirectX 11.1 Game Programming"</a>. Game Programming Using QT is a complete guide to designing and building fun games with Qt and Qt Quick 2 using associated toolsets for cross platform devices.</li>
-			<li><strong>2017 : </strong>Joined <a href="https://fanap.ir/" target="_blank">Fanap.Co</a> as CTO & Project manager of<a href="https://www.youtube.com/watch?v=ygpz35ddZ_4" target="_blank"> "Project Falcon"</a>.</li>
-                    	<li><strong>2018 : </strong>Co-Founder and leader of <a href="https://playpod.ir/" target="_blank">PlayPod</a> the first cloud gaming console in Iran and Middle East</a>.</li>
-			<li><strong>2021 : </strong>Co-Founder at <a href="https://arium.gg/" target="_blank">Arium</a> Play and rival other users via our leagues and duels from any device, any location and let your skills generate income</a>.</li>
-			</ul>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <script src="js/jquery.min.js"></script>
-    <script src="js/bootstrap.min.js"></script>
+        <ol class="loader-stages" aria-label="Loading stages">
+          <li data-stage="matrix" aria-current="step"><span class="stage-index">01</span><span>Matrix signal</span></li>
+          <li data-stage="face"><span class="stage-index">02</span><span>Digital likeness</span></li>
+          <li data-stage="timeline"><span class="stage-index">03</span><span>Timeline stream</span></li>
+        </ol>
+      </section>
 
+      <section class="unsupported-panel" id="unsupported-panel" aria-labelledby="unsupported-title" hidden>
+        <p class="eyebrow">WebGPU unavailable</p>
+        <h2 id="unsupported-title">The signal could not start.</h2>
+        <p>
+          Welcome to website of Pooya Eimandar, it seems your browser doesn't support WebGPU, please update your browser
+          or use another one.
+        </p>
+      </section>
+
+      <section class="error-panel" id="error-panel" aria-labelledby="error-title" hidden>
+        <p class="eyebrow">Renderer offline</p>
+        <h2 id="error-title">The WebGPU scene could not be loaded.</h2>
+        <p id="error-message">The accessible timeline is still available below.</p>
+        <button id="retry-button" type="button">Try again</button>
+      </section>
+
+      <div class="timeline-transcript" aria-live="polite" aria-atomic="true">
+        <p id="timeline-year">1986–2007</p>
+        <h2 id="timeline-title">Origins</h2>
+        <p id="timeline-description">2 milestones — Born · First strokes</p>
+      </div>
+    </section>
+
+    <section class="timeline-copy" id="timeline-copy" aria-labelledby="timeline-copy-title">
+      <header class="timeline-copy-header">
+        <p class="eyebrow">1986 — 2026</p>
+        <h2 id="timeline-copy-title" aria-label="Pooya's Timeline"><span aria-hidden="true">pooya@timeline:~$ history
+            --all</span></h2>
+        <p>Thirty-seven milestones across graphics, games, publishing, teaching, technology leadership, and cloud
+          platforms.</p>
+      </header>
+
+      <section class="timeline-group" aria-labelledby="origins-title">
+        <header>
+          <p>1986–2007</p>
+          <h3 id="origins-title">Origins</h3>
+        </header>
+        <ol>
+          <li data-milestone data-id="born" data-year="1986">
+            <time datetime="1986">1986</time>
+            <div>
+              <h4>Born</h4>
+              <p>Born on January 7.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="swimming" data-year="1992">
+            <time datetime="1992">1992</time>
+            <div>
+              <h4>First strokes</h4>
+              <p>Started learning to swim.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="lifeguard-certificate" data-year="1999">
+            <time datetime="1999">1999</time>
+            <div>
+              <h4>Lifeguard certificate</h4>
+              <p>Earned his lifeguard certificate.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="water-polo" data-year="2000">
+            <time datetime="2000">2000</time>
+            <div>
+              <h4>Water polo</h4>
+              <p>Joined the <a href="https://en.wikipedia.org/wiki/Shahid_Shiroudi_Stadium" target="_blank"
+                  rel="noopener noreferrer">Shahid Shiroudi Stadium</a> water polo club as a goalkeeper.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="snake" data-year="2006">
+            <time datetime="2006">2006</time>
+            <div>
+              <h4>First hobby game</h4>
+              <p>Programmed Snake, his first hobby game, in C.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="whist" data-year="2007">
+            <time datetime="2007">2007</time>
+            <div>
+              <h4>A card game in C#</h4>
+              <p>Programmed the card game Whist in C#.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="timeline-group" aria-labelledby="foundations-title">
+        <header>
+          <p>2008–2012</p>
+          <h3 id="foundations-title">Foundations</h3>
+        </header>
+        <ol>
+          <li data-milestone data-id="university" data-year="2008">
+            <time datetime="2008">2008</time>
+            <div>
+              <h4>Computer science and hardware engineering</h4>
+              <p>Graduated from <a href="https://shomal.ac.ir/en/" target="_blank" rel="noopener noreferrer">Shomal
+                  University</a>. His thesis work simulated a CPU and mainboard with an FPGA and a lift-truck robot with
+                an Atmel microcontroller.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="persian-engine" data-year="2008">
+            <time datetime="2008">2008</time>
+            <div>
+              <h4>Persian Engine</h4>
+              <p>Started developing his first in-house game engine, <a href="https://persianengine.codeplex.com/"
+                  target="_blank" rel="noopener noreferrer">Persian Engine</a>.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="safa" data-year="2009">
+            <time datetime="2009">2009</time>
+            <div>
+              <h4>Safa</h4>
+              <p>Joined Safa's development team as a Senior Silverlight Developer on Project Sara 8.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="bazipardaz" data-year="2010">
+            <time datetime="2010">2010</time>
+            <div>
+              <h4>Founded BaziPardaz</h4>
+              <p>Founded the independent BaziPardaz game studio to develop software, simulations, interactive games, and
+                game-engine technology. <a href="https://vimeo.com/channels/bazipardaz" target="_blank"
+                  rel="noopener noreferrer">Vimeo</a> <span aria-hidden="true">·</span> <a
+                  href="https://www.facebook.com/bazipardaz" target="_blank" rel="noopener noreferrer">Facebook</a></p>
+            </div>
+          </li>
+          <li data-milestone data-id="the-land" data-year="2010">
+            <time datetime="2010">2010</time>
+            <div>
+              <h4>The Land</h4>
+              <p>Started a prototype of <a href="https://vimeo.com/106925703" target="_blank"
+                  rel="noopener noreferrer">The Land</a>, a third-person shooter built with Persian Engine.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="technology-award" data-year="2011">
+            <time datetime="2011">2011</time>
+            <div>
+              <h4>Best technology award</h4>
+              <p>Persian Engine was nominated for Best Computer Games Technology at Tehran's International Digital Media
+                Festival and Fair and won the award.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="silverlight-port" data-year="2012">
+            <time datetime="2012">2012</time>
+            <div>
+              <h4>Persian Engine on the web</h4>
+              <p>Started porting Persian Engine to the Silverlight 5 platform.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="master-chef" data-year="2012">
+            <time datetime="2012">2012</time>
+            <div>
+              <h4>The Master Chef</h4>
+              <p>Started <a href="https://vimeo.com/96698402" target="_blank" rel="noopener noreferrer">The Master
+                  Chef</a> at BaziPardaz, an interactive game based on Kinect and Persian Engine.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="timeline-group" aria-labelledby="publishing-title">
+        <header>
+          <p>2013–2014</p>
+          <h3 id="publishing-title">Publishing &amp; teaching</h3>
+        </header>
+        <ol>
+          <li data-milestone data-id="directx-book" data-year="2013">
+            <time datetime="2013">2013</time>
+            <div>
+              <h4>DirectX 11.1 Game Programming</h4>
+              <p>Authored <a href="https://www.packtpub.com/product/directx-11-1-game-programming/9781849694803"
+                  target="_blank" rel="noopener noreferrer">DirectX 11.1 Game Programming</a>, a step-by-step guide to
+                creating 3D applications and games with a multithreaded C++/CX and DirectX 11.1 framework for Windows
+                Store apps.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="graphics-diagnostics-article" data-year="2013">
+            <time datetime="2013">2013</time>
+            <div>
+              <h4>DirectX Graphics Diagnostics</h4>
+              <p>Published an article about DirectX Graphics Diagnostics on <a
+                  href="https://gamedev.net/tutorials/programming/graphics/directx-graphics-diagnostic-r3380/"
+                  target="_blank" rel="noopener noreferrer">GameDev.net</a> and <a
+                  href="https://hub.packtpub.com/directx-graphics-diagnostic/" target="_blank"
+                  rel="noopener noreferrer">Packt Hub</a>.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="directx-blog" data-year="2013">
+            <time datetime="2013">2013</time>
+            <div>
+              <h4>A dedicated DirectX blog</h4>
+              <p>Launched a <a href="https://directx11-1-gameprogramming.azurewebsites.net/" target="_blank"
+                  rel="noopener noreferrer">companion blog</a> for DirectX 11.1 Game Programming, helping experienced
+                DirectX developers explore newer DirectX 11.x features.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="city2" data-year="2013">
+            <time datetime="2013">2013</time>
+            <div>
+              <h4>City2</h4>
+              <p>Started <a href="https://vimeo.com/80917932" target="_blank" rel="noopener noreferrer">City2</a>, an
+                online social-city simulation built with Persian Engine; its browser version used Silverlight 5.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="uast-lecturer" data-year="2013">
+            <time datetime="2013">2013</time>
+            <div>
+              <h4>University lecturer</h4>
+              <p>Became a lecturer at the Iran University of Applied Science and Technology's <a
+                  href="https://www.nfcg-uast.ac.ir/?page_id=373" target="_blank" rel="noopener noreferrer">National
+                  Foundation of Computer Games</a>.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="igdi-lecturer" data-year="2014">
+            <time datetime="2014">2014</time>
+            <div>
+              <h4>Iran Game Development Institute</h4>
+              <p>Became a lecturer at the <a href="https://www.irangdi.com/" target="_blank"
+                  rel="noopener noreferrer">Iran Game Development Institute</a>.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="modern-cpp" data-year="2014">
+            <time datetime="2014">2014</time>
+            <div>
+              <h4>Learning Modern C++</h4>
+              <p>Launched <a href="https://learningmoderncpp.codeplex.com/" target="_blank"
+                  rel="noopener noreferrer">Learning Modern C++ for Game Programmers</a>, a free, open-source self-study
+                project for developers learning modern C++ through game programming.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="gaming-healthcare" data-year="2014">
+            <time datetime="2014">2014</time>
+            <div>
+              <h4>Gaming in healthcare</h4>
+              <p>Published <a href="https://www.slideshare.net/PooyaEimandar/ss-38769072" target="_blank"
+                  rel="noopener noreferrer">Gaming in Healthcare</a> at Iran's first Game and Medical Health conference.
+              </p>
+            </div>
+          </li>
+          <li data-milestone data-id="igdf-jury" data-year="2014">
+            <time datetime="2014">2014</time>
+            <div>
+              <h4>IGDF jury panel</h4>
+              <p>Joined the <a href="https://igdf.ir/News/YXnvBTHD35o=" target="_blank" rel="noopener noreferrer">IGDF
+                  2014</a> jury panel for Best Computer Games Technology.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="persian-engine-release" data-year="2014">
+            <time datetime="2014">2014</time>
+            <div>
+              <h4>Persian Engine released</h4>
+              <p>Published the final version of Persian Engine, including its <a href="https://vimeo.com/79195038"
+                  target="_blank" rel="noopener noreferrer">editor</a>, <a href="https://vimeo.com/79210871"
+                  target="_blank" rel="noopener noreferrer">animation mixer</a>, and <a
+                  href="https://vimeo.com/83172048" target="_blank" rel="noopener noreferrer">Softimage FaceRobot
+                  integration</a>.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="playout-cg" data-year="2014">
+            <time datetime="2014">2014</time>
+            <div>
+              <h4>Real-time playout and CG</h4>
+              <p>Started developing real-time playout and CG-editor tools based on the MOS protocol, using C++, FFmpeg,
+                and DirectX 11.1 with Blackmagic DeckLink capture, editing, and HD/SD playback. <a
+                  href="https://www.youtube.com/watch?v=EZSdEjBvuGY" target="_blank" rel="noopener noreferrer">Watch the
+                  first version</a>.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section class="timeline-group" aria-labelledby="leadership-title">
+        <header>
+          <p>2015–2026</p>
+          <h3 id="leadership-title">Leadership &amp; platforms</h3>
+        </header>
+        <ol>
+          <li data-milestone data-id="wolf-engine" data-year="2015">
+            <time datetime="2015">2015</time>
+            <div>
+              <h4>Wolf Engine</h4>
+              <p>Started the next generation of his in-house game engine, <a
+                  href="https://github.com/WolfSource/WolfEngine" target="_blank" rel="noopener noreferrer">Wolf
+                  Engine</a>.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="wolf-source" data-year="2016">
+            <time datetime="2016">2016</time>
+            <div>
+              <h4>CEO of Wolf Source</h4>
+              <p>Became CEO of <a href="https://github.com/WolfSource/WolfEngine" target="_blank"
+                  rel="noopener noreferrer">Wolf Source</a>, working across games, game engines, 3D tools, and
+                television-broadcast technology.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="qt-book-reviewer" data-year="2016">
+            <time datetime="2016">2016</time>
+            <div>
+              <h4>Technical book reviewer</h4>
+              <p>Reviewed <a
+                  href="https://www.packtpub.com/product/game-programming-using-qt-beginners-guide/9781782168874"
+                  target="_blank" rel="noopener noreferrer">Game Programming Using Qt: Beginner's Guide</a> by Witold
+                Wysota and Lorenz Haas, his second Packt book project after DirectX 11.1 Game Programming.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="fanap-falcon" data-year="2017">
+            <time datetime="2017">2017</time>
+            <div>
+              <h4>Project Falcon</h4>
+              <p>Joined <a href="https://fanap.ir/" target="_blank" rel="noopener noreferrer">Fanap</a> as Project
+                Manager of <a href="https://www.youtube.com/watch?v=ygpz35ddZ_4" target="_blank"
+                  rel="noopener noreferrer">Project Falcon</a>.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="playpod" data-year="2018">
+            <time datetime="2018">2018</time>
+            <div>
+              <h4>PlayPod</h4>
+              <p>Co-founded and led <a href="https://playpod.ir/" target="_blank" rel="noopener noreferrer">PlayPod</a>,
+                the first cloud-gaming console in Iran and the Middle East.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="arium" data-year="2021">
+            <time datetime="2021">2021</time>
+            <div>
+              <h4>Co-Founder &amp; CTO at Arium</h4>
+              <p>Co-founded <a href="https://arium.gg/" target="_blank" rel="noopener noreferrer">Arium</a> as CTO, a
+                cloud-gaming platform for peer-to-peer duels.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="rust-cpp-book-reviewer" data-year="2023">
+            <time datetime="2023">2023</time>
+            <div>
+              <h4>Technical reviewer — Rust for C++ Programmers</h4>
+              <p>Served as technical reviewer for <a href="https://bpbonline.com/products/rust-for-c-programmers"
+                  target="_blank" rel="noopener noreferrer">Rust for C++ Programmers</a> by Mustafif Khan, published
+                by BPB.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="integrating-rust" data-year="2024">
+            <time datetime="2024">2024</time>
+            <div>
+              <h4>Co-author of Integrating Rust</h4>
+              <p>Co-authored <a
+                  href="https://uk.bookshop.org/p/books/integrating-rust-adopt-rust-effortlessly-for-secure-scalable-and-high-performance-systems-abhishek-kumar/7c62b433331b7603?ean=9789365898262"
+                  target="_blank" rel="noopener noreferrer">Integrating Rust</a> with Abhishek Kumar, a practical guide
+                to adopting Rust for secure, scalable, and high-performance systems.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="playpod-fellow" data-year="2025">
+            <time datetime="2025">2025</time>
+            <div>
+              <h4>Fellow at PlayPod</h4>
+              <p>Exited as CEO of Alpha after steering the company to its first profit in three years, and became a
+                Fellow at <a href="https://playpod.ir/" target="_blank" rel="noopener noreferrer">PlayPod</a>. Since
+                2018, PlayPod has served more than one million Iranian gamers, was selected among the top candidates for
+                Fit 4 Start Luxembourg in 2020, and was named the top product at the fifth Iranian Product Innovation
+                Leaders Festival at Sharif University of Technology (Aryamehr).</p>
+            </div>
+          </li>
+          <li data-milestone data-id="alpha-platforms" data-year="2025">
+            <time datetime="2025">2025</time>
+            <div>
+              <h4>Alpha technology milestones</h4>
+              <p>During Pooya's leadership, <a href="https://alphaco.cloud" target="_blank"
+                  rel="noopener noreferrer">Alpha</a> was recognized by Iran's Vice Presidency as a knowledge-based
+                company, delivered a digital twin for Bank Pasargad's central branch named PodVerse, and built and
+                scaled GPU-partitioning infrastructure to allocate GPUs to PlayPod and other GPU-based projects.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="ainu" data-year="2026">
+            <time datetime="2026">2026</time>
+            <div>
+              <h4>AINU</h4>
+              <p>Joined AINU Tech Source and established the company's vision as well as its technical foundations from
+                scratch to launch AINU Invest and other upcoming projects.</p>
+            </div>
+          </li>
+          <li data-milestone data-id="web-development-rust-reviewer" data-year="2026">
+            <time datetime="2026">2026</time>
+            <div>
+              <h4>Technical reviewer — Web Development in Rust</h4>
+              <p>Served as technical reviewer for <a href="https://bpbonline.com/products/web-development-in-rust-1"
+                  target="_blank" rel="noopener noreferrer">Web Development in Rust</a> by Viktor Daróczi, published by
+                BPB.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+    </section>
+
+    <section class="contact-panel" id="contact" aria-labelledby="contact-title">
+      <div>
+        <p class="eyebrow">Contact</p>
+        <h2 id="contact-title">Stay Hungry, Stay Foolish</h2>
+      </div>
+      <a href="mailto:mail@pooya.ai">Contact</a>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Built with Rust, Sib, and WebGPU.</p>
+    <p>© <time id="copyright-year"></time> Pooya Eimandar</p>
+  </footer>
+
+  <noscript>
+    <div class="noscript-message">JavaScript is required for the WebGPU scene. Pooya's complete timeline remains
+      available on this page.</div>
+  </noscript>
+  <script type="module" src="app.js"></script>
 </body>
+
 </html>

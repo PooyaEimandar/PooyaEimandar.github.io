@@ -1,0 +1,20 @@
+**/.DS_Store
+
+# Local build and dependency output
+/node_modules/
+/target/
+/pkg/
+/_site/
+/app.js
+/app.js.map
+
+# The portrait is a private, build-time-only KTX conversion input.
+/asset/Pooya.jpeg
+
+# Local texture-pipeline caches and authoring files
+**/__pycache__/
+*.py[cod]
+/tools/textures/.venv/
+/tools/textures/work/
+*.blend
+*.blend1
