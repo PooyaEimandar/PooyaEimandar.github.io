@@ -190,7 +190,7 @@ function renderTimelinePage(data, currentYear) {
   <meta name="author" content="Pooya Eimandar">
   <meta property="og:type" content="profile">
   <meta property="og:title" content="Pooya Eimandar's Timeline">
-  <meta property="og:description" content="${milestoneCount} milestones across graphics, games, publishing, teaching, and technology leadership.">
+  <meta property="og:description" content="Pooya Eimandar's milestones across graphics, games, publishing, teaching, and technology leadership.">
   <meta property="og:url" content="https://pooya.ai/timeline/">
   <link rel="canonical" href="https://pooya.ai/timeline/">
   <link rel="stylesheet" href="../assets/css/site.css">
