@@ -33,12 +33,6 @@ jobs:
       - name: Install browser-build dependencies
         run: npm ci
 
-      - name: Check and compile the TypeScript bridge
-        run: npm run build
-
-      - name: Generate the static timeline page
-        run: npm run build:timeline
-
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -47,8 +41,11 @@ jobs:
       - name: Install the matching wasm-bindgen CLI
         run: cargo install wasm-bindgen-cli --version 0.2.126 --locked
 
-      - name: Build the Rust WebAssembly renderer
-        run: scripts/build-wasm.sh --release
+      - name: Build the site
+        run: ./build.sh --release
+
+      - name: Verify generated timelines are committed
+        run: git diff --exit-code -- index.html timeline/index.html
 
       - name: Stage approved runtime files
         run: |

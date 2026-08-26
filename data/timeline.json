@@ -4,7 +4,7 @@
     {
       "id": "origins",
       "title": "Origins",
-      "range": "1987–2007",
+      "range": "1987–2008",
       "entries": [
         {
           "id": "born",
@@ -52,14 +52,7 @@
           "title": "A card game in C#",
           "text": "Programmed the card game Whist in C#.",
           "links": []
-        }
-      ]
-    },
-    {
-      "id": "foundations",
-      "title": "Foundations",
-      "range": "2008–2012",
-      "entries": [
+        },
         {
           "id": "university",
           "year": "2008",
@@ -71,7 +64,169 @@
               "url": "https://shomal.ac.ir/en/"
             }
           ]
+        }
+      ]
+    },
+    {
+      "id": "publishing-teaching",
+      "title": "Publishing & teaching",
+      "range": "2013–2025",
+      "entries": [
+        {
+          "id": "directx-book",
+          "year": "2013",
+          "title": "DirectX 11.1 Game Programming",
+          "text": "Authored DirectX 11.1 Game Programming, a step-by-step guide to creating 3D applications and games with a multithreaded C++/CX and DirectX 11.1 framework for Windows Store apps.",
+          "links": [
+            {
+              "label": "DirectX 11.1 Game Programming",
+              "url": "https://www.packtpub.com/product/directx-11-1-game-programming/9781849694803"
+            }
+          ]
         },
+        {
+          "id": "graphics-diagnostics-article",
+          "year": "2013",
+          "title": "DirectX Graphics Diagnostics",
+          "text": "Published an article about DirectX Graphics Diagnostics on GameDev.net and Packt Hub.",
+          "links": [
+            {
+              "label": "GameDev.net article",
+              "url": "https://gamedev.net/tutorials/programming/graphics/directx-graphics-diagnostic-r3380/"
+            },
+            {
+              "label": "Packt Hub article",
+              "url": "https://hub.packtpub.com/directx-graphics-diagnostic/"
+            }
+          ]
+        },
+        {
+          "id": "directx-blog",
+          "year": "2013",
+          "title": "A dedicated DirectX blog",
+          "text": "Launched a companion blog for DirectX 11.1 Game Programming, helping experienced DirectX developers explore newer DirectX 11.x features.",
+          "links": [
+            {
+              "label": "DirectX 11.1 Game Programming blog",
+              "url": "https://directx11-1-gameprogramming.azurewebsites.net/"
+            }
+          ]
+        },
+        {
+          "id": "uast-lecturer",
+          "year": "2013",
+          "title": "University lecturer",
+          "text": "Became a lecturer at the Iran University of Applied Science and Technology's National Foundation of Computer Games.",
+          "links": [
+            {
+              "label": "National Foundation of Computer Games",
+              "url": "https://www.nfcg-uast.ac.ir/?page_id=373"
+            }
+          ]
+        },
+        {
+          "id": "igdi-lecturer",
+          "year": "2014",
+          "title": "Iran Game Development Institute",
+          "text": "Became a lecturer at the Iran Game Development Institute.",
+          "links": [
+            {
+              "label": "Iran Game Development Institute",
+              "url": "https://www.irangdi.com/"
+            }
+          ]
+        },
+        {
+          "id": "modern-cpp",
+          "year": "2014",
+          "title": "Learning Modern C++",
+          "text": "Launched Learning Modern C++ for Game Programmers, a free, open-source self-study project for developers learning modern C++ through game programming.",
+          "links": [
+            {
+              "label": "Learning Modern C++ archive",
+              "url": "https://learningmoderncpp.codeplex.com/"
+            }
+          ]
+        },
+        {
+          "id": "gaming-healthcare",
+          "year": "2014",
+          "title": "Gaming in healthcare",
+          "text": "Published Gaming in Healthcare at Iran's first Game and Medical Health conference.",
+          "links": [
+            {
+              "label": "Gaming in Healthcare",
+              "url": "https://www.slideshare.net/PooyaEimandar/ss-38769072"
+            }
+          ]
+        },
+        {
+          "id": "igdf-jury",
+          "year": "2014",
+          "title": "IGDF jury panel",
+          "text": "Joined the IGDF 2014 jury panel for Best Computer Games Technology.",
+          "links": [
+            {
+              "label": "IGDF 2014",
+              "url": "https://igdf.ir/News/YXnvBTHD35o="
+            }
+          ]
+        },
+        {
+          "id": "qt-book-reviewer",
+          "year": "2016",
+          "title": "Technical book reviewer",
+          "text": "Reviewed Game Programming Using Qt: Beginner's Guide by Witold Wysota and Lorenz Haas, his second Packt book project after DirectX 11.1 Game Programming.",
+          "links": [
+            {
+              "label": "Game Programming Using Qt",
+              "url": "https://www.packtpub.com/product/game-programming-using-qt-beginners-guide/9781782168874"
+            }
+          ]
+        },
+        {
+          "id": "rust-cpp-book-reviewer",
+          "year": "2023",
+          "title": "Technical reviewer — Rust for C++ Programmers",
+          "text": "Served as technical reviewer for Rust for C++ Programmers by Mustafif Khan, published by BPB.",
+          "links": [
+            {
+              "label": "Rust for C++ Programmers",
+              "url": "https://bpbonline.com/products/rust-for-c-programmers"
+            }
+          ]
+        },
+        {
+          "id": "integrating-rust",
+          "year": "2024",
+          "title": "Co-author of Integrating Rust",
+          "text": "Co-authored Integrating Rust with Abhishek Kumar, a practical guide to adopting Rust for secure, scalable, and high-performance systems.",
+          "links": [
+            {
+              "label": "Integrating Rust",
+              "url": "https://uk.bookshop.org/p/books/integrating-rust-adopt-rust-effortlessly-for-secure-scalable-and-high-performance-systems-abhishek-kumar/7c62b433331b7603?ean=9789365898262"
+            }
+          ]
+        },
+        {
+          "id": "web-development-rust-reviewer",
+          "year": "2025",
+          "title": "Technical reviewer — Web Development in Rust",
+          "text": "Served as technical reviewer for Web Development in Rust by Viktor Daróczi, published by BPB.",
+          "links": [
+            {
+              "label": "Web Development in Rust",
+              "url": "https://bpbonline.com/products/web-development-in-rust-1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "leadership-experiments",
+      "title": "Leadership & experiments",
+      "range": "2008–2026",
+      "entries": [
         {
           "id": "persian-engine",
           "year": "2008",
@@ -144,53 +299,6 @@
               "url": "https://vimeo.com/96698402"
             }
           ]
-        }
-      ]
-    },
-    {
-      "id": "publishing-teaching",
-      "title": "Publishing & teaching",
-      "range": "2013–2014",
-      "entries": [
-        {
-          "id": "directx-book",
-          "year": "2013",
-          "title": "DirectX 11.1 Game Programming",
-          "text": "Authored DirectX 11.1 Game Programming, a step-by-step guide to creating 3D applications and games with a multithreaded C++/CX and DirectX 11.1 framework for Windows Store apps.",
-          "links": [
-            {
-              "label": "DirectX 11.1 Game Programming",
-              "url": "https://www.packtpub.com/product/directx-11-1-game-programming/9781849694803"
-            }
-          ]
-        },
-        {
-          "id": "graphics-diagnostics-article",
-          "year": "2013",
-          "title": "DirectX Graphics Diagnostics",
-          "text": "Published an article about DirectX Graphics Diagnostics on GameDev.net and Packt Hub.",
-          "links": [
-            {
-              "label": "GameDev.net article",
-              "url": "https://gamedev.net/tutorials/programming/graphics/directx-graphics-diagnostic-r3380/"
-            },
-            {
-              "label": "Packt Hub article",
-              "url": "https://hub.packtpub.com/directx-graphics-diagnostic/"
-            }
-          ]
-        },
-        {
-          "id": "directx-blog",
-          "year": "2013",
-          "title": "A dedicated DirectX blog",
-          "text": "Launched a companion blog for DirectX 11.1 Game Programming, helping experienced DirectX developers explore newer DirectX 11.x features.",
-          "links": [
-            {
-              "label": "DirectX 11.1 Game Programming blog",
-              "url": "https://directx11-1-gameprogramming.azurewebsites.net/"
-            }
-          ]
         },
         {
           "id": "city2",
@@ -201,66 +309,6 @@
             {
               "label": "Watch City2",
               "url": "https://vimeo.com/80917932"
-            }
-          ]
-        },
-        {
-          "id": "uast-lecturer",
-          "year": "2013",
-          "title": "University lecturer",
-          "text": "Became a lecturer at the Iran University of Applied Science and Technology's National Foundation of Computer Games.",
-          "links": [
-            {
-              "label": "National Foundation of Computer Games",
-              "url": "https://www.nfcg-uast.ac.ir/?page_id=373"
-            }
-          ]
-        },
-        {
-          "id": "igdi-lecturer",
-          "year": "2014",
-          "title": "Iran Game Development Institute",
-          "text": "Became a lecturer at the Iran Game Development Institute.",
-          "links": [
-            {
-              "label": "Iran Game Development Institute",
-              "url": "https://www.irangdi.com/"
-            }
-          ]
-        },
-        {
-          "id": "modern-cpp",
-          "year": "2014",
-          "title": "Learning Modern C++",
-          "text": "Launched Learning Modern C++ for Game Programmers, a free, open-source self-study project for developers learning modern C++ through game programming.",
-          "links": [
-            {
-              "label": "Learning Modern C++ archive",
-              "url": "https://learningmoderncpp.codeplex.com/"
-            }
-          ]
-        },
-        {
-          "id": "gaming-healthcare",
-          "year": "2014",
-          "title": "Gaming in healthcare",
-          "text": "Published Gaming in Healthcare at Iran's first Game and Medical Health conference.",
-          "links": [
-            {
-              "label": "Gaming in Healthcare",
-              "url": "https://www.slideshare.net/PooyaEimandar/ss-38769072"
-            }
-          ]
-        },
-        {
-          "id": "igdf-jury",
-          "year": "2014",
-          "title": "IGDF jury panel",
-          "text": "Joined the IGDF 2014 jury panel for Best Computer Games Technology.",
-          "links": [
-            {
-              "label": "IGDF 2014",
-              "url": "https://igdf.ir/News/YXnvBTHD35o="
             }
           ]
         },
@@ -295,14 +343,7 @@
               "url": "https://www.youtube.com/watch?v=EZSdEjBvuGY"
             }
           ]
-        }
-      ]
-    },
-    {
-      "id": "leadership-platforms",
-      "title": "Leadership & platforms",
-      "range": "2015–2026",
-      "entries": [
+        },
         {
           "id": "wolf-engine",
           "year": "2015",
@@ -324,18 +365,6 @@
             {
               "label": "Wolf Source",
               "url": "https://github.com/WolfSource/WolfEngine"
-            }
-          ]
-        },
-        {
-          "id": "qt-book-reviewer",
-          "year": "2016",
-          "title": "Technical book reviewer",
-          "text": "Reviewed Game Programming Using Qt: Beginner's Guide by Witold Wysota and Lorenz Haas, his second Packt book project after DirectX 11.1 Game Programming.",
-          "links": [
-            {
-              "label": "Game Programming Using Qt",
-              "url": "https://www.packtpub.com/product/game-programming-using-qt-beginners-guide/9781782168874"
             }
           ]
         },
@@ -368,10 +397,22 @@
           ]
         },
         {
+          "id": "alpha",
+          "year": "2020",
+          "title": "Co-Founder & CEO at Alpha",
+          "text": "Co-founded Alpha as CEO to build cloud, GPU, AI, cloud-gaming, enterprise-software, and metaverse infrastructure and products.",
+          "links": [
+            {
+              "label": "Alpha",
+              "url": "https://alphaco.cloud/"
+            }
+          ]
+        },
+        {
           "id": "arium",
           "year": "2021",
-          "title": "Co-Founder & CTO at Arium",
-          "text": "Co-founded Arium as CTO, a cloud-gaming platform for peer-to-peer duels.",
+          "title": "Co-Founder of Arium",
+          "text": "Co-founded Arium, a cloud-gaming platform for peer-to-peer duels.",
           "links": [
             {
               "label": "Arium",
@@ -380,26 +421,14 @@
           ]
         },
         {
-          "id": "rust-cpp-book-reviewer",
-          "year": "2023",
-          "title": "Technical reviewer — Rust for C++ Programmers",
-          "text": "Served as technical reviewer for Rust for C++ Programmers by Mustafif Khan, published by BPB.",
+          "id": "alpha-platforms",
+          "year": "2025",
+          "title": "Alpha technology milestones",
+          "text": "Stepped down as CEO of Alpha after steering the company to its first profit in three years. During Pooya's leadership, Alpha was recognized by Iran's Vice Presidency as a knowledge-based company, delivered a digital twin for Bank Pasargad's central branch named PodVerse, and built and scaled GPU-partitioning infrastructure to allocate GPUs to PlayPod and other GPU-based projects.",
           "links": [
             {
-              "label": "Rust for C++ Programmers",
-              "url": "https://bpbonline.com/products/rust-for-c-programmers"
-            }
-          ]
-        },
-        {
-          "id": "integrating-rust",
-          "year": "2024",
-          "title": "Co-author of Integrating Rust",
-          "text": "Co-authored Integrating Rust with Abhishek Kumar, a practical guide to adopting Rust for secure, scalable, and high-performance systems.",
-          "links": [
-            {
-              "label": "Integrating Rust",
-              "url": "https://uk.bookshop.org/p/books/integrating-rust-adopt-rust-effortlessly-for-secure-scalable-and-high-performance-systems-abhishek-kumar/7c62b433331b7603?ean=9789365898262"
+              "label": "Alpha",
+              "url": "https://alphaco.cloud/"
             }
           ]
         },
@@ -407,23 +436,11 @@
           "id": "playpod-fellow",
           "year": "2025",
           "title": "Fellow at PlayPod",
-          "text": "Exited as CEO of Alpha after steering the company to its first profit in three years, and became a Fellow at PlayPod. Since 2018, PlayPod has served more than one million Iranian gamers, was selected among the top candidates for Fit 4 Start Luxembourg in 2020, and was named the top product at the fifth Iranian Product Innovation Leaders Festival at Sharif University of Technology (Aryamehr).",
+          "text": "He then became a Fellow at PlayPod. Since 2018, PlayPod has served more than one million Iranian gamers, was selected among the top candidates for Fit 4 Start Luxembourg in 2020, and was named the top product at the fifth Iranian Product Innovation Leaders Festival at Sharif University of Technology (Aryamehr).",
           "links": [
             {
               "label": "PlayPod",
               "url": "https://playpod.ir/"
-            }
-          ]
-        },
-        {
-          "id": "alpha-platforms",
-          "year": "2025",
-          "title": "Alpha technology milestones",
-          "text": "During Pooya's leadership, Alpha was recognized by Iran's Vice Presidency as a knowledge-based company, delivered a digital twin for Bank Pasargad's central branch named PodVerse, and built and scaled GPU-partitioning infrastructure to allocate GPUs to PlayPod and other GPU-based projects.",
-          "links": [
-            {
-              "label": "Alpha",
-              "url": "https://alphaco.cloud"
             }
           ]
         },
@@ -433,18 +450,6 @@
           "title": "AINU",
           "text": "Joined AINU Tech Source and established the company's vision as well as its technical foundations from scratch to launch AINU Invest and other upcoming projects.",
           "links": []
-        },
-        {
-          "id": "web-development-rust-reviewer",
-          "year": "2026",
-          "title": "Technical reviewer — Web Development in Rust",
-          "text": "Served as technical reviewer for Web Development in Rust by Viktor Daróczi, published by BPB.",
-          "links": [
-            {
-              "label": "Web Development in Rust",
-              "url": "https://bpbonline.com/products/web-development-in-rust-1"
-            }
-          ]
         }
       ]
     }

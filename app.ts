@@ -493,7 +493,7 @@ motionQuery.addEventListener("change", applySystemMotionPreference);
 const currentYear = new Date().getFullYear().toString();
 copyrightYear.dateTime = currentYear;
 copyrightYear.textContent = currentYear;
-updateTimelineTranscript(0, "1987–2007", "Origins");
+updateTimelineTranscript(0, "1987–2008", "Origins");
 
 void loadTimelineData().catch((error: unknown) => {
   console.warn("The canonical timeline data could not be validated; using the semantic HTML copy.", error);
