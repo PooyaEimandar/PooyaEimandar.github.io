@@ -57,6 +57,8 @@ const TIMELINE_PATH = "./data/timeline.json";
 const BUILD_ID = new URL(import.meta.url).searchParams.get("build") ?? "development";
 const MAX_ENTRIES_PER_SLIDE = 4;
 const RENDERER_TIMEOUT_MS = 30_000;
+const UNSUPPORTED_REDIRECT_SECONDS = 7;
+const TIMELINE_FALLBACK_PATH = "/timeline/";
 const PRODUCTION_HOSTNAMES = new Set(["pooya.ai", "www.pooya.ai"]);
 const WEBGPU_UNAVAILABLE_MESSAGE =
   "Welcome to website of Pooya Eimandar, it seems your browser doesn't support WebGPU, please update your browser or use another one.";
@@ -101,6 +103,7 @@ const milestoneElements = Array.from(document.querySelectorAll<HTMLElement>("[da
 let wasmBindings: WasmBindings | null = null;
 let rendererReady = false;
 let rendererTimeout: number | undefined;
+let unsupportedRedirectTimer: number | undefined;
 let slideCount = 10;
 let currentSlide = 0;
 let timelineSlides: TimelineSlide[] = deriveSlidesFromDom();
@@ -226,14 +229,40 @@ function showUnsupportedBrowser(
   message = WEBGPU_UNAVAILABLE_MESSAGE,
 ): void {
   clearRendererTimeout();
+  clearUnsupportedRedirectCountdown();
   page.dataset.renderState = "unsupported";
   page.classList.remove("webgpu-active");
   timelineCopy.removeAttribute("inert");
   loaderPanel.hidden = true;
   errorPanel.hidden = true;
   unsupportedTitle.textContent = title;
-  unsupportedMessage.textContent = message;
   unsupportedPanel.hidden = false;
+  startUnsupportedRedirectCountdown(message);
+}
+
+function clearUnsupportedRedirectCountdown(): void {
+  if (unsupportedRedirectTimer !== undefined) {
+    window.clearInterval(unsupportedRedirectTimer);
+    unsupportedRedirectTimer = undefined;
+  }
+}
+
+function startUnsupportedRedirectCountdown(message: string): void {
+  let secondsRemaining = UNSUPPORTED_REDIRECT_SECONDS;
+  const updateMessage = (): void => {
+    unsupportedMessage.textContent =
+      `${message} You are going to visit timeline in ${secondsRemaining}s.`;
+  };
+
+  updateMessage();
+  unsupportedRedirectTimer = window.setInterval(() => {
+    secondsRemaining -= 1;
+    updateMessage();
+    if (secondsRemaining <= 0) {
+      clearUnsupportedRedirectCountdown();
+      window.location.replace(TIMELINE_FALLBACK_PATH);
+    }
+  }, 1_000);
 }
 
 function redirectProductionToHttps(): boolean {
@@ -254,6 +283,7 @@ function redirectProductionToHttps(): boolean {
 
 function showRendererError(error: unknown): void {
   clearRendererTimeout();
+  clearUnsupportedRedirectCountdown();
   rendererReady = false;
   page.dataset.renderState = "error";
   page.classList.remove("webgpu-active");
@@ -394,6 +424,7 @@ function handleRendererReady(event: Event): void {
 
   rendererReady = true;
   clearRendererTimeout();
+  clearUnsupportedRedirectCountdown();
   page.dataset.renderState = "ready";
   page.classList.add("webgpu-active");
   // Keep the complete, server-delivered timeline in the document for search
