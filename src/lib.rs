@@ -32,10 +32,13 @@ const TERMINAL_BASE_LINE_HEIGHT: f32 = 0.198;
 const TERMINAL_FONT_SIZE: f32 = TERMINAL_BASE_FONT_SIZE * TERMINAL_TEXT_SCALE;
 const TERMINAL_LINE_HEIGHT: f32 = TERMINAL_BASE_LINE_HEIGHT * TERMINAL_TEXT_SCALE;
 const TERMINAL_DEPTH: f32 = 0.012 * TERMINAL_TEXT_SCALE;
-const MOBILE_TERMINAL_BASE_SCALE: f32 = 0.68;
-const MOBILE_TERMINAL_BOOSTED_SCALE: f32 = 0.72;
+const MOBILE_TERMINAL_SIZE_MULTIPLIER: f32 = 1.5;
+const MOBILE_TERMINAL_BASE_SCALE: f32 = 0.68 * MOBILE_TERMINAL_SIZE_MULTIPLIER;
+const MOBILE_TERMINAL_BOOSTED_SCALE: f32 = 0.72 * MOBILE_TERMINAL_SIZE_MULTIPLIER;
 const MOBILE_TERMINAL_BOOST_START_ASPECT: f32 = 0.48;
 const MOBILE_TERMINAL_BOOST_END_ASPECT: f32 = 0.58;
+const MOBILE_TIMELINE_MAX_ASPECT: f32 = 0.8;
+const MOBILE_TERMINAL_VERTICAL_OFFSET: f32 = -0.43;
 // The atlas supplies the solid face of each glyph. Keep the extruded contour
 // narrow so it adds depth without visually turning the regular font bold.
 const TERMINAL_STROKE_WIDTH: f32 = TERMINAL_FONT_SIZE * 0.045;
@@ -44,9 +47,11 @@ const _: () = assert!(FACE_REVEAL_END < TIMELINE_START);
 const _: () = assert!(MATRIX_SIGNAL_MIN_INTERVAL < MATRIX_SIGNAL_MAX_INTERVAL);
 const _: () = assert!(MATRIX_SIGNAL_DURATION < MATRIX_SIGNAL_MIN_INTERVAL);
 const _: () = assert!(TERMINAL_TEXT_SCALE == 1.5);
+const _: () = assert!(MOBILE_TERMINAL_SIZE_MULTIPLIER == 1.5);
 const _: () = assert!(TERMINAL_STROKE_WIDTH <= TERMINAL_FONT_SIZE * 0.05);
 const _: () = assert!(MOBILE_TERMINAL_BASE_SCALE < MOBILE_TERMINAL_BOOSTED_SCALE);
 const _: () = assert!(MOBILE_TERMINAL_BOOST_START_ASPECT < MOBILE_TERMINAL_BOOST_END_ASPECT);
+const _: () = assert!(MOBILE_TERMINAL_BOOST_END_ASPECT < MOBILE_TIMELINE_MAX_ASPECT);
 
 static REDUCED_MOTION: AtomicBool = AtomicBool::new(false);
 static PRIMARY_ACTION_REQUEST: AtomicBool = AtomicBool::new(false);
@@ -411,7 +416,8 @@ struct Portfolio {
     text_bind_group: Option<wgpu::BindGroup>,
     portrait: Option<GpuPortrait>,
     timeline_slides: Vec<TimelineSlide>,
-    timeline_meshes: Vec<GpuTextMesh>,
+    timeline_meshes: Vec<Option<GpuTextMesh>>,
+    mobile_timeline_line_limit: Option<usize>,
     text_overlay: Option<text::TextOverlay>,
     copyright_notice: String,
     depth: Option<texture::Texture>,
@@ -444,6 +450,7 @@ impl Portfolio {
             portrait: None,
             timeline_slides: Vec::new(),
             timeline_meshes: Vec::new(),
+            mobile_timeline_line_limit: None,
             text_overlay: None,
             copyright_notice: copyright_notice(),
             depth: None,
@@ -657,6 +664,7 @@ impl Portfolio {
             text_opacity,
             self.timeline_meshes
                 .get(self.current_slide)
+                .and_then(Option::as_ref)
                 .map(|mesh| &mesh.links),
         );
     }
@@ -665,7 +673,11 @@ impl Portfolio {
         let Some(slide) = self.timeline_slides.get(self.current_slide) else {
             return Ok(());
         };
-        let Some(text_mesh) = self.timeline_meshes.get(self.current_slide) else {
+        let Some(text_mesh) = self
+            .timeline_meshes
+            .get(self.current_slide)
+            .and_then(Option::as_ref)
+        else {
             return Ok(());
         };
         let reduced = REDUCED_MOTION.load(Ordering::Relaxed);
@@ -801,7 +813,10 @@ impl Portfolio {
         if self.elapsed < TIMELINE_START || self.slide_progress < 0.12 {
             return None;
         }
-        let text_mesh = self.timeline_meshes.get(self.current_slide)?;
+        let text_mesh = self
+            .timeline_meshes
+            .get(self.current_slide)
+            .and_then(Option::as_ref)?;
         let aspect = context.aspect_ratio().max(0.01);
         let (view_projection, camera_distance) = responsive_camera(aspect);
         let terminal_lines = self
@@ -839,6 +854,111 @@ impl Portfolio {
         } else {
             winit::window::CursorIcon::Default
         });
+    }
+
+    fn rebuild_timeline_geometry(
+        &mut self,
+        context: &RenderContext,
+        mobile_line_limit: Option<usize>,
+    ) -> RenderResult<()> {
+        let previous_position = self.timeline_slides.get(self.current_slide).map(|slide| {
+            (
+                slide.primary_entry_id().to_owned(),
+                slide.source_line_start(),
+                (self.section_age / slide.typing_duration().max(f32::EPSILON)).clamp(0.0, 1.0),
+                self.slide_progress,
+            )
+        });
+        let slides = if let Some(max_lines) = mobile_line_limit {
+            timeline::load_mobile_slides(max_lines)
+        } else {
+            timeline::load_slides()
+        }
+        .map_err(RenderError::message)?;
+        let current_slide = previous_position
+            .as_ref()
+            .and_then(|(entry_id, source_line_start, _, _)| {
+                slides.iter().position(|slide| {
+                    slide.contains_entry(entry_id)
+                        && slide.source_line_start() == *source_line_start
+                })
+            })
+            .or_else(|| {
+                previous_position
+                    .as_ref()
+                    .and_then(|(entry_id, source_line_start, _, _)| {
+                        slides
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, slide)| slide.contains_entry(entry_id))
+                            .min_by_key(|(_, slide)| {
+                                slide.source_line_start().abs_diff(*source_line_start)
+                            })
+                            .map(|(index, _)| index)
+                    })
+            })
+            .unwrap_or(0);
+        let meshes = if mobile_line_limit.is_some() {
+            let current_mesh = slides
+                .get(current_slide)
+                .map(build_timeline_mesh)
+                .transpose()?
+                .map(|mesh| GpuTextMesh::from_mesh(&context.device, &mesh));
+            let mut meshes = (0..slides.len()).map(|_| None).collect::<Vec<_>>();
+            if let Some(current_mesh) = current_mesh {
+                meshes[current_slide] = Some(current_mesh);
+            }
+            meshes
+        } else {
+            slides
+                .iter()
+                .map(build_timeline_mesh)
+                .collect::<RenderResult<Vec<_>>>()?
+                .iter()
+                .map(|mesh| Some(GpuTextMesh::from_mesh(&context.device, mesh)))
+                .collect()
+        };
+
+        self.timeline_slides = slides;
+        self.timeline_meshes = meshes;
+        self.mobile_timeline_line_limit = mobile_line_limit;
+        self.current_slide = current_slide;
+        self.section_age = if let Some((_, _, typing_progress, _)) = previous_position.as_ref() {
+            self.timeline_slides[current_slide].typing_duration() * typing_progress
+        } else {
+            0.0
+        };
+        self.slide_progress = previous_position
+            .map(|(_, _, _, slide_progress)| slide_progress)
+            .unwrap_or_else(|| {
+                if REDUCED_MOTION.load(Ordering::Relaxed) {
+                    1.0
+                } else {
+                    0.0
+                }
+            });
+        self.hovered_link = None;
+        self.touch_gesture = None;
+        Ok(())
+    }
+
+    fn ensure_timeline_mesh(
+        &mut self,
+        context: &RenderContext,
+        slide_index: usize,
+    ) -> RenderResult<()> {
+        let Some(slot) = self.timeline_meshes.get(slide_index) else {
+            return Ok(());
+        };
+        if slot.is_some() {
+            return Ok(());
+        }
+        let Some(slide) = self.timeline_slides.get(slide_index) else {
+            return Ok(());
+        };
+        let mesh = build_timeline_mesh(slide)?;
+        self.timeline_meshes[slide_index] = Some(GpuTextMesh::from_mesh(&context.device, &mesh));
+        Ok(())
     }
 }
 
@@ -953,18 +1073,17 @@ impl Example for Portfolio {
         self.text_uniform_buffer = Some(text_uniform_buffer);
         self.text_bind_group = Some(text_bind_group);
 
-        self.timeline_slides = timeline::load_slides()
-            .map_err(RenderError::message)
-            .map_err(report_renderer_init_error)?;
-        self.timeline_meshes = self
-            .timeline_slides
-            .iter()
-            .map(build_timeline_mesh)
-            .collect::<RenderResult<Vec<_>>>()
-            .map_err(report_renderer_init_error)?
-            .iter()
-            .map(|mesh| GpuTextMesh::from_mesh(&context.device, mesh))
-            .collect();
+        self.rebuild_timeline_geometry(
+            context,
+            responsive_mobile_line_limit(
+                glam::Vec2::new(
+                    context.surface_config.width as f32,
+                    context.surface_config.height as f32,
+                ),
+                context.window.scale_factor() as f32,
+            ),
+        )
+        .map_err(report_renderer_init_error)?;
         dispatch_scene_progress(
             "timeline",
             76,
@@ -995,6 +1114,22 @@ impl Example for Portfolio {
             &context.device,
             &context.surface_config,
         ));
+        let mobile_line_limit = responsive_mobile_line_limit(
+            glam::Vec2::new(
+                context.surface_config.width as f32,
+                context.surface_config.height as f32,
+            ),
+            context.window.scale_factor() as f32,
+        );
+        if mobile_line_limit != self.mobile_timeline_line_limit {
+            match self.rebuild_timeline_geometry(context, mobile_line_limit) {
+                Ok(()) if self.renderer_ready_dispatched => self.dispatch_timeline_change(),
+                Ok(()) => {}
+                Err(error) => log_message(&format!(
+                    "Could not rebuild the responsive timeline geometry: {error}"
+                )),
+            }
+        }
         self.update_uniforms(context);
     }
 
@@ -1141,6 +1276,26 @@ impl Example for Portfolio {
             self.perform_primary_action();
         }
 
+        if let Err(error) = self.ensure_timeline_mesh(context, self.current_slide) {
+            log_message(&format!(
+                "Could not build timeline page {}: {error}",
+                self.current_slide + 1
+            ));
+        }
+        let current_page_complete = self
+            .timeline_slides
+            .get(self.current_slide)
+            .is_some_and(|slide| self.visible_typed_characters() >= slide.character_count());
+        if current_page_complete && !self.timeline_meshes.is_empty() {
+            let next_slide = (self.current_slide + 1) % self.timeline_meshes.len();
+            if let Err(error) = self.ensure_timeline_mesh(context, next_slide) {
+                log_message(&format!(
+                    "Could not prepare timeline page {}: {error}",
+                    next_slide + 1
+                ));
+            }
+        }
+
         if reduced {
             self.elapsed = self.elapsed.max(TIMELINE_START + 1.0);
             self.slide_progress = 1.0;
@@ -1207,7 +1362,10 @@ impl Example for Portfolio {
         }
 
         if self.elapsed >= TIMELINE_START - 0.1
-            && let Some(text_mesh) = self.timeline_meshes.get(self.current_slide)
+            && let Some(text_mesh) = self
+                .timeline_meshes
+                .get(self.current_slide)
+                .and_then(Option::as_ref)
         {
             pass.set_pipeline(&pipelines.text);
             pass.set_bind_group(0, text_bind_group, &[]);
@@ -1750,6 +1908,49 @@ fn terminal_overlay_layout(
     })
 }
 
+fn responsive_mobile_line_limit(viewport: glam::Vec2, scale_factor: f32) -> Option<usize> {
+    if viewport.x <= 0.0 || viewport.y <= 0.0 || !viewport.is_finite() {
+        return None;
+    }
+    let scale_factor = scale_factor.max(1.0);
+    let logical_viewport = viewport / scale_factor;
+    let aspect = viewport.x / viewport.y;
+    if !uses_mobile_timeline(aspect) {
+        return None;
+    }
+
+    let header_height = if logical_viewport.x <= 620.0 {
+        100.0
+    } else if logical_viewport.x <= 980.0 {
+        104.0
+    } else {
+        88.0
+    } * scale_factor;
+    let safety_margin = 4.0 * scale_factor;
+    let copyright_top = copyright_overlay_layout(viewport, scale_factor)
+        .placement
+        .top
+        - safety_margin;
+    let (view_projection, camera_distance) = responsive_camera(aspect);
+
+    for line_count in
+        (timeline::MOBILE_MIN_TERMINAL_LINES..=timeline::MOBILE_MAX_TERMINAL_LINES).rev()
+    {
+        let model = terminal_model(aspect, camera_distance, 1.0, line_count);
+        let Some(layout) =
+            terminal_overlay_layout(viewport, view_projection, model, line_count, 27, 1.0)
+        else {
+            continue;
+        };
+        let bottom = layout.placement.top + layout.placement.height;
+        if layout.placement.top >= header_height + safety_margin && bottom <= copyright_top {
+            return Some(line_count);
+        }
+    }
+
+    Some(timeline::MOBILE_MIN_TERMINAL_LINES)
+}
+
 fn mobile_terminal_scale(aspect: f32) -> f32 {
     mix(
         MOBILE_TERMINAL_BASE_SCALE,
@@ -1762,6 +1963,10 @@ fn mobile_terminal_scale(aspect: f32) -> f32 {
     )
 }
 
+fn uses_mobile_timeline(aspect: f32) -> bool {
+    aspect < MOBILE_TIMELINE_MAX_ASPECT
+}
+
 fn terminal_model(
     aspect: f32,
     camera_distance: f32,
@@ -1771,13 +1976,13 @@ fn terminal_model(
     let mobile_scale = mobile_terminal_scale(aspect);
     let base_scale: f32 = if aspect >= 1.15 {
         0.72
-    } else if aspect >= 0.8 {
+    } else if aspect >= MOBILE_TIMELINE_MAX_ASPECT {
         0.68
     } else {
         // Browser chrome shortens the visible mobile viewport and produces a
         // wider aspect than a full-height device frame. Boost that common
-        // layout while retaining the original scale on exceptionally tall,
-        // narrow screens where the 42-column terminal already fills the width.
+        // layout while the mobile-specific 27-column transcript keeps the
+        // enlarged glyphs inside exceptionally tall, narrow screens.
         mobile_scale
     };
     let plane_distance = (camera_distance - 1.05).max(0.1);
@@ -1790,13 +1995,18 @@ fn terminal_model(
     };
     let target_x = if aspect >= 1.15 {
         -4.62
-    } else if aspect >= 0.8 {
+    } else if aspect >= MOBILE_TIMELINE_MAX_ASPECT {
         -2.70
     } else {
         -1.85 * (mobile_scale / MOBILE_TERMINAL_BASE_SCALE)
     };
+    let target_y = if uses_mobile_timeline(aspect) {
+        MOBILE_TERMINAL_VERTICAL_OFFSET
+    } else {
+        0.0
+    };
     let slide_offset = mix(-camera_distance * 1.45, 0.0, ease_out_cubic(slide_progress));
-    glam::Mat4::from_translation(glam::Vec3::new(target_x + slide_offset, 0.0, 1.05))
+    glam::Mat4::from_translation(glam::Vec3::new(target_x + slide_offset, target_y, 1.05))
         * glam::Mat4::from_scale(glam::Vec3::splat(text_scale))
 }
 
@@ -2404,6 +2614,23 @@ mod tests {
         assert!((full_height_mobile_scale - MOBILE_TERMINAL_BASE_SCALE).abs() < f32::EPSILON);
         assert!(browser_view_mobile_scale >= full_height_mobile_scale * 1.04);
         assert!(browser_view_mobile_scale <= MOBILE_TERMINAL_BOOSTED_SCALE);
+        assert_eq!(
+            responsive_mobile_line_limit(glam::Vec2::new(390.0, 844.0), 1.0),
+            Some(timeline::MOBILE_MAX_TERMINAL_LINES)
+        );
+        assert_eq!(
+            responsive_mobile_line_limit(glam::Vec2::new(780.0, 1688.0), 2.0),
+            responsive_mobile_line_limit(glam::Vec2::new(390.0, 844.0), 1.0)
+        );
+        assert!(
+            responsive_mobile_line_limit(glam::Vec2::new(320.0, 493.0), 1.0)
+                .is_some_and(|lines| lines < timeline::MOBILE_MAX_TERMINAL_LINES)
+        );
+        assert!(responsive_mobile_line_limit(glam::Vec2::new(768.0, 1024.0), 1.0).is_some());
+        assert_eq!(
+            responsive_mobile_line_limit(glam::Vec2::new(801.0, 1000.0), 1.0),
+            None
+        );
 
         let options = text_mesh::TextMeshOptions {
             font_size: TERMINAL_FONT_SIZE,
@@ -2421,30 +2648,41 @@ mod tests {
             text_mesh::TextMesh::from_font_bytes(FONT_BYTES, "||", [1.0; 4], options).unwrap();
         let cell_advance = double_pipe.bounds.width() - pipe.bounds.width();
 
-        for slide in timeline::load_slides().unwrap() {
-            let max_columns = slide
-                .terminal
-                .lines()
-                .map(|line| line.chars().count())
-                .max()
-                .unwrap_or(1) as f32;
-            let min_local = glam::Vec2::new(
-                -cell_advance * 0.1,
-                -(slide.line_count() as f32) * TERMINAL_LINE_HEIGHT * 0.5 - TERMINAL_FONT_SIZE,
-            );
-            let max_local = glam::Vec2::new(
-                (max_columns + 1.0) * cell_advance,
-                slide.line_count() as f32 * TERMINAL_LINE_HEIGHT * 0.5 + TERMINAL_FONT_SIZE,
-            );
-            for viewport in [
-                glam::Vec2::new(1440.0, 900.0),
-                glam::Vec2::new(768.0, 1024.0),
-                glam::Vec2::new(390.0, 844.0),
-                glam::Vec2::new(390.0, 700.0),
-            ] {
-                let aspect = viewport.x / viewport.y;
+        for viewport in [
+            glam::Vec2::new(320.0, 493.0),
+            glam::Vec2::new(360.0, 800.0),
+            glam::Vec2::new(390.0, 844.0),
+            glam::Vec2::new(390.0, 700.0),
+            glam::Vec2::new(768.0, 1024.0),
+            glam::Vec2::new(1440.0, 900.0),
+        ] {
+            let aspect = viewport.x / viewport.y;
+            let mobile_line_limit = responsive_mobile_line_limit(viewport, 1.0);
+            let slides = if let Some(max_lines) = mobile_line_limit {
+                timeline::load_mobile_slides(max_lines).unwrap()
+            } else {
+                timeline::load_slides().unwrap()
+            };
+            for slide in slides {
+                if let Some(max_lines) = mobile_line_limit {
+                    assert!(slide.line_count() <= max_lines);
+                }
                 let (view_projection, camera_distance) = responsive_camera(aspect);
                 let model = terminal_model(aspect, camera_distance, 1.0, slide.line_count());
+                let max_columns = slide
+                    .terminal
+                    .lines()
+                    .map(|line| line.chars().count())
+                    .max()
+                    .unwrap_or(1) as f32;
+                let min_local = glam::Vec2::new(
+                    -cell_advance * 0.1,
+                    -(slide.line_count() as f32) * TERMINAL_LINE_HEIGHT * 0.5 - TERMINAL_FONT_SIZE,
+                );
+                let max_local = glam::Vec2::new(
+                    (max_columns + 1.0) * cell_advance,
+                    slide.line_count() as f32 * TERMINAL_LINE_HEIGHT * 0.5 + TERMINAL_FONT_SIZE,
+                );
                 let mut max_abs_ndc = glam::Vec2::ZERO;
                 let mut min_ndc = glam::Vec2::splat(f32::INFINITY);
                 let mut max_ndc = glam::Vec2::splat(f32::NEG_INFINITY);
@@ -2467,20 +2705,33 @@ mod tests {
                     slide.line_count()
                 );
 
-                if viewport.x == 390.0 {
-                    let mut projected_y = [0.0; 2];
-                    for (index, local_y) in [-TERMINAL_FONT_SIZE * 0.5, TERMINAL_FONT_SIZE * 0.5]
-                        .into_iter()
-                        .enumerate()
-                    {
-                        let clip =
-                            view_projection * model * glam::Vec4::new(0.0, local_y, 0.0, 1.0);
-                        projected_y[index] = clip.y / clip.w;
-                    }
-                    let em_pixels = (projected_y[1] - projected_y[0]).abs() * viewport.y * 0.5;
+                if mobile_line_limit.is_some() {
+                    let legacy_scale = mix(
+                        0.68,
+                        0.72,
+                        smoothstep(
+                            MOBILE_TERMINAL_BOOST_START_ASPECT,
+                            MOBILE_TERMINAL_BOOST_END_ASPECT,
+                            aspect,
+                        ),
+                    );
+                    let rendered_scale = model.x_axis.truncate().length();
                     assert!(
-                        em_pixels >= 9.5,
-                        "mobile terminal em is too small: {em_pixels:.2}px"
+                        (rendered_scale / legacy_scale - MOBILE_TERMINAL_SIZE_MULTIPLIER).abs()
+                            <= 0.001,
+                        "mobile terminal scale is not exactly 1.5x at {viewport:?}"
+                    );
+
+                    let terminal_top = (1.0 - max_ndc.y) * viewport.y * 0.5;
+                    let terminal_bottom = (1.0 - min_ndc.y) * viewport.y * 0.5;
+                    let copyright_top = copyright_overlay_layout(viewport, 1.0).placement.top;
+                    assert!(
+                        terminal_top >= 100.0,
+                        "mobile terminal begins behind the fixed header at {viewport:?}: {terminal_top:.1}px"
+                    );
+                    assert!(
+                        terminal_bottom <= copyright_top,
+                        "mobile terminal overlaps copyright at {viewport:?}: {terminal_bottom:.1}px > {copyright_top:.1}px"
                     );
                 }
             }
