@@ -36,6 +36,9 @@ jobs:
       - name: Check and compile the TypeScript bridge
         run: npm run build
 
+      - name: Generate the static timeline page
+        run: npm run build:timeline
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -50,9 +53,10 @@ jobs:
       - name: Stage approved runtime files
         run: |
           rm -rf _site
-          mkdir -p _site/data _site/pkg _site/assets/css _site/assets/fonts _site/assets/textures
-          cp app.js THIRD_PARTY_NOTICES.md LICENSE _site/
+          mkdir -p _site/data _site/pkg _site/timeline _site/assets/css _site/assets/fonts _site/assets/textures
+          cp app.js THIRD_PARTY_NOTICES.md LICENSE robots.txt sitemap.xml _site/
           sed "s/__BUILD_ID__/${GITHUB_SHA}/g" index.html > _site/index.html
+          cp timeline/index.html _site/timeline/
           cp assets/css/site.css _site/assets/css/
           cp data/timeline.json _site/data/
           cp pkg/pooya_portfolio.js pkg/pooya_portfolio_bg.wasm _site/pkg/
