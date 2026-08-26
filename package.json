@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "build:timeline": "node scripts/build-static-timeline.mjs",
+    "check:timeline": "node scripts/build-static-timeline.mjs --check",
     "check": "tsc --project tsconfig.json --noEmit"
   },
   "devDependencies": {

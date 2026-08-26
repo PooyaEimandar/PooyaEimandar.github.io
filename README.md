@@ -13,10 +13,12 @@ Requirements:
 
 ```sh
 npm ci
-npm run check
-npm run build
-scripts/build-wasm.sh --release
+./build.sh --release
 ```
+
+`data/timeline.json` is the timeline's single source of truth. The build embeds
+it in the Rust/WebGPU renderer and generates both the semantic homepage copy
+and the crawlable `/timeline/` page from the same data.
 
 Production WebGPU requires HTTPS. The TypeScript bridge redirects the public
 `pooya.ai` hosts to HTTPS, checks the secure context and `navigator.gpu`, then
