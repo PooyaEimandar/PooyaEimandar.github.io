@@ -475,6 +475,7 @@ body.webgpu-active .timeline-copy {
   border-bottom: 1px solid var(--line);
 }
 
+.timeline-copy-header h1,
 .timeline-copy-header h2 {
   margin: 0 0 0.85rem;
   color: var(--matrix);
@@ -508,6 +509,7 @@ body.webgpu-active .timeline-copy {
   letter-spacing: 0.12em;
 }
 
+.timeline-page .timeline-group h2,
 .timeline-group h3 {
   margin: 0;
   color: var(--ink);
@@ -516,6 +518,7 @@ body.webgpu-active .timeline-copy {
   text-transform: none;
 }
 
+.timeline-page .timeline-group h2::before,
 .timeline-group h3::before {
   color: var(--matrix);
   content: "$ ./section ";
@@ -545,12 +548,14 @@ body.webgpu-active .timeline-copy {
   font: 600 0.72rem/1.5 var(--mono);
 }
 
+.timeline-page .timeline-group h3,
 .timeline-group h4 {
   margin: 0 0 0.45rem;
   font: 600 clamp(0.78rem, 1.3vw, 0.9rem)/1.5 var(--mono);
   letter-spacing: 0;
 }
 
+.timeline-page .timeline-group h3::before,
 .timeline-group h4::before {
   color: var(--matrix);
   content: "> ";
@@ -564,6 +569,26 @@ body.webgpu-active .timeline-copy {
 }
 
 .timeline-group li a {
+  color: var(--matrix-bright);
+}
+
+.timeline-entry-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  margin: 0.65rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline-entry-links li {
+  display: list-item;
+  padding: 0;
+  border: 0;
+}
+
+.timeline-entry-links a,
+.timeline-page .site-footer a {
   color: var(--matrix-bright);
 }
 

@@ -32,6 +32,10 @@ const TERMINAL_BASE_LINE_HEIGHT: f32 = 0.198;
 const TERMINAL_FONT_SIZE: f32 = TERMINAL_BASE_FONT_SIZE * TERMINAL_TEXT_SCALE;
 const TERMINAL_LINE_HEIGHT: f32 = TERMINAL_BASE_LINE_HEIGHT * TERMINAL_TEXT_SCALE;
 const TERMINAL_DEPTH: f32 = 0.012 * TERMINAL_TEXT_SCALE;
+const MOBILE_TERMINAL_BASE_SCALE: f32 = 0.68;
+const MOBILE_TERMINAL_BOOSTED_SCALE: f32 = 0.72;
+const MOBILE_TERMINAL_BOOST_START_ASPECT: f32 = 0.48;
+const MOBILE_TERMINAL_BOOST_END_ASPECT: f32 = 0.58;
 // The atlas supplies the solid face of each glyph. Keep the extruded contour
 // narrow so it adds depth without visually turning the regular font bold.
 const TERMINAL_STROKE_WIDTH: f32 = TERMINAL_FONT_SIZE * 0.045;
@@ -41,6 +45,8 @@ const _: () = assert!(MATRIX_SIGNAL_MIN_INTERVAL < MATRIX_SIGNAL_MAX_INTERVAL);
 const _: () = assert!(MATRIX_SIGNAL_DURATION < MATRIX_SIGNAL_MIN_INTERVAL);
 const _: () = assert!(TERMINAL_TEXT_SCALE == 1.5);
 const _: () = assert!(TERMINAL_STROKE_WIDTH <= TERMINAL_FONT_SIZE * 0.05);
+const _: () = assert!(MOBILE_TERMINAL_BASE_SCALE < MOBILE_TERMINAL_BOOSTED_SCALE);
+const _: () = assert!(MOBILE_TERMINAL_BOOST_START_ASPECT < MOBILE_TERMINAL_BOOST_END_ASPECT);
 
 static REDUCED_MOTION: AtomicBool = AtomicBool::new(false);
 static PRIMARY_ACTION_REQUEST: AtomicBool = AtomicBool::new(false);
@@ -1744,21 +1750,35 @@ fn terminal_overlay_layout(
     })
 }
 
+fn mobile_terminal_scale(aspect: f32) -> f32 {
+    mix(
+        MOBILE_TERMINAL_BASE_SCALE,
+        MOBILE_TERMINAL_BOOSTED_SCALE,
+        smoothstep(
+            MOBILE_TERMINAL_BOOST_START_ASPECT,
+            MOBILE_TERMINAL_BOOST_END_ASPECT,
+            aspect,
+        ),
+    )
+}
+
 fn terminal_model(
     aspect: f32,
     camera_distance: f32,
     slide_progress: f32,
     line_count: usize,
 ) -> glam::Mat4 {
+    let mobile_scale = mobile_terminal_scale(aspect);
     let base_scale: f32 = if aspect >= 1.15 {
         0.72
     } else if aspect >= 0.8 {
         0.68
     } else {
-        // Fira Mono Regular has a slightly wider advance than Medium. Preserve
-        // the 1.5x glyph size contract while keeping the longest mobile line
-        // inside the viewport.
-        0.68
+        // Browser chrome shortens the visible mobile viewport and produces a
+        // wider aspect than a full-height device frame. Boost that common
+        // layout while retaining the original scale on exceptionally tall,
+        // narrow screens where the 42-column terminal already fills the width.
+        mobile_scale
     };
     let plane_distance = (camera_distance - 1.05).max(0.1);
     let visible_height = 2.0 * plane_distance * (22.0_f32.to_radians()).tan();
@@ -1773,7 +1793,7 @@ fn terminal_model(
     } else if aspect >= 0.8 {
         -2.70
     } else {
-        -1.85
+        -1.85 * (mobile_scale / MOBILE_TERMINAL_BASE_SCALE)
     };
     let slide_offset = mix(-camera_distance * 1.45, 0.0, ease_out_cubic(slide_progress));
     glam::Mat4::from_translation(glam::Vec3::new(target_x + slide_offset, 0.0, 1.05))
@@ -2379,6 +2399,12 @@ mod tests {
 
     #[test]
     fn responsive_terminal_models_keep_every_wrapped_line_in_view() {
+        let full_height_mobile_scale = mobile_terminal_scale(390.0 / 844.0);
+        let browser_view_mobile_scale = mobile_terminal_scale(390.0 / 700.0);
+        assert!((full_height_mobile_scale - MOBILE_TERMINAL_BASE_SCALE).abs() < f32::EPSILON);
+        assert!(browser_view_mobile_scale >= full_height_mobile_scale * 1.04);
+        assert!(browser_view_mobile_scale <= MOBILE_TERMINAL_BOOSTED_SCALE);
+
         let options = text_mesh::TextMeshOptions {
             font_size: TERMINAL_FONT_SIZE,
             line_height: TERMINAL_LINE_HEIGHT,
@@ -2414,11 +2440,14 @@ mod tests {
                 glam::Vec2::new(1440.0, 900.0),
                 glam::Vec2::new(768.0, 1024.0),
                 glam::Vec2::new(390.0, 844.0),
+                glam::Vec2::new(390.0, 700.0),
             ] {
                 let aspect = viewport.x / viewport.y;
                 let (view_projection, camera_distance) = responsive_camera(aspect);
                 let model = terminal_model(aspect, camera_distance, 1.0, slide.line_count());
                 let mut max_abs_ndc = glam::Vec2::ZERO;
+                let mut min_ndc = glam::Vec2::splat(f32::INFINITY);
+                let mut max_ndc = glam::Vec2::splat(f32::NEG_INFINITY);
                 for local in [
                     glam::Vec2::new(min_local.x, min_local.y),
                     glam::Vec2::new(min_local.x, max_local.y),
@@ -2427,12 +2456,14 @@ mod tests {
                 ] {
                     let clip =
                         view_projection * model * glam::Vec4::new(local.x, local.y, 0.0, 1.0);
-                    let ndc = (clip.truncate() / clip.w).truncate().abs();
-                    max_abs_ndc = max_abs_ndc.max(ndc);
+                    let ndc = (clip.truncate() / clip.w).truncate();
+                    min_ndc = min_ndc.min(ndc);
+                    max_ndc = max_ndc.max(ndc);
+                    max_abs_ndc = max_abs_ndc.max(ndc.abs());
                 }
                 assert!(
                     max_abs_ndc.x <= 0.99 && max_abs_ndc.y <= 0.90,
-                    "{} lines exceed the {viewport:?} viewport: max NDC {max_abs_ndc:?}",
+                    "{} lines exceed the {viewport:?} viewport: NDC {min_ndc:?}..{max_ndc:?}",
                     slide.line_count()
                 );
 
