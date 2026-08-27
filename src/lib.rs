@@ -965,7 +965,7 @@ impl Portfolio {
 impl Example for Portfolio {
     fn settings(&self) -> ExampleSettings {
         ExampleSettings {
-            title: "Pooya Eimandar · Rust/WebGPU Timeline".to_owned(),
+            title: "Pooya Eimandar's Personal Website".to_owned(),
             initial_size: winit::dpi::PhysicalSize::new(1440, 900),
             ..Default::default()
         }
