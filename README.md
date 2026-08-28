@@ -1,4 +1,4 @@
-# Pooya Eimandar — [Personal Website](https://pooya.ai)
+# Pooya Eimandar | [Personal Website](https://pooya.ai)
 
 Pooya's personal timeline rendered in real time with Rust, WebAssembly, WebGPU,
 and the [`sib::render`](https://github.com/PooyaEimandar/sib) module.
