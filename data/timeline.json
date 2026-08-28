@@ -445,6 +445,30 @@
           ]
         },
         {
+          "id": "sib",
+          "year": "2025",
+          "title": "Sib",
+          "text": "Developed Sib, an open-source Rust library of cross-platform modules for real-time streaming, low-latency networking, scalable HTTP services, and WebGPU rendering.",
+          "links": [
+            {
+              "label": "Sib on GitHub",
+              "url": "https://github.com/PooyaEimandar/sib"
+            }
+          ]
+        },
+        {
+          "id": "webgpu",
+          "year": "2026",
+          "title": "WebGPU examples",
+          "text": "Built a collection of Rust/WebGPU examples based on Sib's render module, adapting Sascha Willems' Vulkan samples for native applications and WebAssembly.",
+          "links": [
+            {
+              "label": "WebGPU on GitHub",
+              "url": "https://github.com/PooyaEimandar/webgpu"
+            }
+          ]
+        },
+        {
           "id": "ainu",
           "year": "2026",
           "title": "AINU",
