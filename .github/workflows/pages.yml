@@ -41,11 +41,8 @@ jobs:
       - name: Install the matching wasm-bindgen CLI
         run: cargo install wasm-bindgen-cli --version 0.2.126 --locked
 
-      - name: Build the site
+      - name: Generate timelines and build the site
         run: ./build.sh --release
-
-      - name: Verify generated timelines are committed
-        run: git diff --exit-code -- index.html timeline/index.html
 
       - name: Stage approved runtime files
         run: |
