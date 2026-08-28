@@ -421,6 +421,18 @@
           ]
         },
         {
+          "id": "arium-exit",
+          "year": "2025",
+          "title": "Exited Arium",
+          "text": "Exited Arium in 2025.",
+          "links": [
+            {
+              "label": "Arium",
+              "url": "https://www.youtube.com/@arium_gg"
+            }
+          ]
+        },
+        {
           "id": "alpha-platforms",
           "year": "2025",
           "title": "Alpha technology milestones",
