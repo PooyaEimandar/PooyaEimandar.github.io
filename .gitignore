@@ -3,8 +3,10 @@
 # Local build and dependency output
 /node_modules/
 /target/
-/pkg/
 /_site/
+
+# Ignore outputs left over from builds before _site became the build directory.
+/pkg/
 /app.js
 /app.js.map
 

@@ -22,12 +22,12 @@ fi
 echo "Building pooya-portfolio for wasm32-unknown-unknown ($PROFILE)"
 cargo build --locked --target wasm32-unknown-unknown $PROFILE_FLAG --lib
 
-mkdir -p pkg
+mkdir -p _site/pkg
 wasm-bindgen \
   --target web \
-  --out-dir pkg \
+  --out-dir _site/pkg \
   --out-name pooya_portfolio \
+  --no-typescript \
   "target/wasm32-unknown-unknown/$PROFILE/pooya_portfolio.wasm"
 
-echo "Generated pkg/pooya_portfolio.js and pkg/pooya_portfolio_bg.wasm"
-
+echo "Generated _site/pkg/pooya_portfolio.js and _site/pkg/pooya_portfolio_bg.wasm"
