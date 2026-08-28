@@ -210,6 +210,7 @@ function renderTimelinePage(data, currentYear) {
       <a href="https://github.com/PooyaEimandar" target="_blank" rel="noopener noreferrer">GitHub</a>
       <a href="https://www.youtube.com/channel/UC5XZoDB5YHd07WSWeMAYyZQ" target="_blank"
         rel="noopener noreferrer">YouTube</a>
+      <a href="https://github.com/sponsors/PooyaEimandar" target="_blank" rel="noopener noreferrer">Sponsor</a>
       <a href="mailto:mail@pooya.ai">Contact</a>
     </nav>
   </header>
