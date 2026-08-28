@@ -1,5 +1,32 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
+interface TimelineLink {
+  label: string;
+  url: string;
+}
+
+interface TimelineEntry {
+  id: string;
+  year: string;
+  title: string;
+  text: string;
+  links: TimelineLink[];
+}
+
+interface TimelineSection {
+  id: string;
+  title: string;
+  range: string;
+  entries: TimelineEntry[];
+}
+
+interface TimelineData {
+  title: string;
+  sections: TimelineSection[];
+}
+
+type RenderTarget = "home" | "page";
+
 const projectRoot = new URL("../", import.meta.url);
 const timelineDataUrl = new URL("data/timeline.json", projectRoot);
 const homePageUrl = new URL("index.html", projectRoot);
@@ -11,10 +38,10 @@ const argumentsList = process.argv.slice(2);
 const checkOnly = argumentsList.length === 1 && argumentsList[0] === "--check";
 
 if (argumentsList.length > 0 && !checkOnly) {
-  throw new Error("Usage: node scripts/build-static-timeline.mjs [--check]");
+  throw new Error("Usage: node scripts/build-static-timeline.ts [--check]");
 }
 
-function escapeHtml(value) {
+function escapeHtml(value: string): string {
   return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -23,22 +50,22 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function assertNonEmptyString(value, label) {
+function assertNonEmptyString(value: unknown, label: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${label} must be a non-empty string.`);
   }
   return value;
 }
 
-function assertSafeId(value, label) {
+function assertSafeId(value: unknown, label: string): string {
   if (typeof value !== "string" || !/^[a-z0-9-]+$/.test(value)) {
     throw new Error(`${label} must contain only lowercase letters, numbers, and hyphens.`);
   }
   return value;
 }
 
-function validateUrl(value, label) {
-  let url;
+function validateUrl(value: unknown, label: string): string {
+  let url: URL;
   try {
     url = new URL(assertNonEmptyString(value, label));
   } catch {
@@ -51,19 +78,25 @@ function validateUrl(value, label) {
   return url.href;
 }
 
-function validateTimeline(data) {
-  if (!data || typeof data !== "object") {
-    throw new Error("Timeline data must be an object.");
+function assertObject(value: unknown, label: string): asserts value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object.`);
   }
+}
+
+function validateTimeline(data: unknown): asserts data is TimelineData {
+  assertObject(data, "Timeline data");
   assertNonEmptyString(data.title, "Timeline title");
   if (!Array.isArray(data.sections) || data.sections.length === 0) {
     throw new Error("Timeline data must contain at least one section.");
   }
 
-  const sectionIds = new Set();
-  const entryIds = new Set();
-  data.sections.forEach((section, sectionIndex) => {
+  const sectionIds = new Set<string>();
+  const entryIds = new Set<string>();
+  const sections: unknown[] = data.sections;
+  sections.forEach((section, sectionIndex) => {
     const sectionLabel = `Timeline section ${sectionIndex + 1}`;
+    assertObject(section, sectionLabel);
     const sectionId = assertSafeId(section.id, `${sectionLabel} id`);
     if (sectionIds.has(sectionId)) {
       throw new Error(`Timeline section id is duplicated: ${sectionId}`);
@@ -75,8 +108,10 @@ function validateTimeline(data) {
       throw new Error(`${sectionLabel} must contain at least one entry.`);
     }
 
-    section.entries.forEach((entry, entryIndex) => {
+    const entries: unknown[] = section.entries;
+    entries.forEach((entry, entryIndex) => {
       const entryLabel = `${sectionLabel}, entry ${entryIndex + 1}`;
+      assertObject(entry, entryLabel);
       const entryId = assertSafeId(entry.id, `${entryLabel} id`);
       if (entryIds.has(entryId)) {
         throw new Error(`Timeline entry id is duplicated: ${entryId}`);
@@ -90,8 +125,10 @@ function validateTimeline(data) {
       if (!Array.isArray(entry.links)) {
         throw new Error(`${entryLabel} links must be an array.`);
       }
-      entry.links.forEach((link, linkIndex) => {
+      const links: unknown[] = entry.links;
+      links.forEach((link, linkIndex) => {
         const linkLabel = `${entryLabel}, link ${linkIndex + 1}`;
+        assertObject(link, linkLabel);
         assertNonEmptyString(link.label, `${linkLabel} label`);
         validateUrl(link.url, `${linkLabel} URL`);
       });
@@ -99,7 +136,7 @@ function validateTimeline(data) {
   });
 }
 
-function renderLinks(links) {
+function renderLinks(links: TimelineLink[]): string {
   if (links.length === 0) {
     return "";
   }
@@ -115,7 +152,7 @@ ${items}
                 </ul>`;
 }
 
-function renderEntry(entry, target) {
+function renderEntry(entry: TimelineEntry, target: RenderTarget): string {
   const id = assertSafeId(entry.id, "Timeline entry id");
   const year = entry.year;
   const heading = target === "home" ? "h4" : "h3";
@@ -132,7 +169,7 @@ function renderEntry(entry, target) {
           </li>`;
 }
 
-function renderSection(section, target) {
+function renderSection(section: TimelineSection, target: RenderTarget): string {
   const id = assertSafeId(section.id, "Timeline section id");
   const heading = target === "home" ? "h3" : "h2";
 
@@ -147,7 +184,7 @@ ${section.entries.map((entry) => renderEntry(entry, target)).join("\n")}
       </section>`;
 }
 
-function timelineFacts(data) {
+function timelineFacts(data: TimelineData): { firstYear: number; milestoneCount: number } {
   const entries = data.sections.flatMap((section) => section.entries);
   return {
     firstYear: Math.min(...entries.map((entry) => Number(entry.year))),
@@ -155,7 +192,7 @@ function timelineFacts(data) {
   };
 }
 
-function renderHomeTimeline(data, currentYear) {
+function renderHomeTimeline(data: TimelineData, currentYear: number): string {
   const { firstYear, milestoneCount } = timelineFacts(data);
   const sections = data.sections.map((section) => renderSection(section, "home")).join("\n\n");
 
@@ -172,12 +209,12 @@ ${sections}
     </section>`;
 }
 
-function renderTimelinePage(data, currentYear) {
+function renderTimelinePage(data: TimelineData, currentYear: number): string {
   const { firstYear, milestoneCount } = timelineFacts(data);
   const sections = data.sections.map((section) => renderSection(section, "page")).join("\n\n");
 
   return `<!doctype html>
-<!-- Generated by scripts/build-static-timeline.mjs from data/timeline.json. -->
+<!-- Generated by scripts/build-static-timeline.ts from data/timeline.json. -->
 <html lang="en">
 
 <head>
@@ -237,7 +274,7 @@ ${sections}
 `;
 }
 
-function replaceHomeTimeline(homePage, timeline) {
+function replaceHomeTimeline(homePage: string, timeline: string): string {
   const start = homePage.indexOf(homeTimelineStart);
   const end = homePage.indexOf(homeTimelineEnd);
   if (start < 0 || end < 0 || end <= start) {
@@ -251,12 +288,12 @@ function replaceHomeTimeline(homePage, timeline) {
   return `${homePage.slice(0, start)}${homeTimelineStart}\n${timeline}\n${homeTimelineEnd}${homePage.slice(end + homeTimelineEnd.length)}`;
 }
 
-async function writeIfChanged(url, expected) {
+async function writeIfChanged(url: URL, expected: string): Promise<void> {
   let current = "";
   try {
     current = await readFile(url, "utf8");
   } catch (error) {
-    if (error?.code !== "ENOENT") {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") {
       throw error;
     }
   }
@@ -265,14 +302,14 @@ async function writeIfChanged(url, expected) {
   }
 }
 
-function assertGeneratedFileIsCurrent(actual, expected, label) {
+function assertGeneratedFileIsCurrent(actual: string, expected: string, label: string): void {
   if (actual !== expected) {
     throw new Error(`${label} is stale. Run npm run build:timeline.`);
   }
 }
 
 const timelineJson = await readFile(timelineDataUrl, "utf8");
-const data = JSON.parse(timelineJson);
+const data: unknown = JSON.parse(timelineJson);
 validateTimeline(data);
 
 const currentYear = new Date().getUTCFullYear();

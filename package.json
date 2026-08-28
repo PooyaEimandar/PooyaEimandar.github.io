@@ -3,13 +3,18 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "scripts": {
-    "build": "tsc --project tsconfig.json",
-    "build:timeline": "node scripts/build-static-timeline.mjs",
-    "check:timeline": "node scripts/build-static-timeline.mjs --check",
-    "check": "tsc --project tsconfig.json --noEmit"
+    "build": "npm run check:scripts && tsc --project tsconfig.json",
+    "build:timeline": "node scripts/build-static-timeline.ts",
+    "check:timeline": "node scripts/build-static-timeline.ts --check",
+    "check:scripts": "tsc --project scripts/tsconfig.json",
+    "check": "tsc --project tsconfig.json --noEmit && npm run check:scripts"
   },
   "devDependencies": {
+    "@types/node": "22.20.1",
     "typescript": "5.9.2"
   }
 }

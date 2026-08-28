@@ -4,6 +4,8 @@
     "module": "ES2022",
     "moduleResolution": "Bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    "outDir": "_site",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noEmitOnError": true,
