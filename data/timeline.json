@@ -475,8 +475,8 @@
           "text": "Built a collection of Rust/WebGPU examples based on Sib's render module, adapting Sascha Willems' Vulkan samples for native applications and WebAssembly.",
           "links": [
             {
-              "label": "WebGPU on GitHub",
-              "url": "https://github.com/PooyaEimandar/webgpu"
+              "label": "WebGPU",
+              "url": "https://pooya.ai/webgpu"
             }
           ]
         },
