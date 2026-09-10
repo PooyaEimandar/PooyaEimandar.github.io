@@ -15,6 +15,16 @@
   --page-gutter: clamp(1rem, 4vw, 4.5rem);
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --display: var(--mono);
+  /* Typographic scale for the timeline copy. The homepage keeps 1: there the
+     timeline is a fallback transcript behind the WebGPU scene. The standalone
+     page at /timeline/ is meant to be read, so it runs 1.5x larger. Every
+     timeline size below is multiplied by this, including the vw term of each
+     clamp(), so the fluid ramp keeps its shape and only its magnitude grows. */
+  --tl-scale: 1;
+}
+
+body.timeline-page {
+  --tl-scale: 1.5;
 }
 
 *,
@@ -479,7 +489,7 @@ body.webgpu-active .timeline-copy {
 .timeline-copy-header h2 {
   margin: 0 0 0.85rem;
   color: var(--matrix);
-  font: 600 clamp(0.95rem, 2vw, 1.2rem)/1.5 var(--mono);
+  font: 600 calc(clamp(0.95rem, 2vw, 1.2rem) * var(--tl-scale))/1.5 var(--mono);
   letter-spacing: 0;
   text-transform: none;
 }
@@ -487,7 +497,7 @@ body.webgpu-active .timeline-copy {
 .timeline-copy-header > p:last-child {
   margin: 0;
   color: var(--ink-muted);
-  font: 400 clamp(0.72rem, 1.2vw, 0.86rem)/1.7 var(--mono);
+  font: 400 calc(clamp(0.72rem, 1.2vw, 0.86rem) * var(--tl-scale))/1.7 var(--mono);
 }
 
 .timeline-group {
@@ -505,7 +515,7 @@ body.webgpu-active .timeline-copy {
 .timeline-group > header p {
   margin: 0 0 0.5rem;
   color: var(--matrix);
-  font: 700 0.7rem/1 var(--mono);
+  font: 700 calc(0.7rem * var(--tl-scale))/1 var(--mono);
   letter-spacing: 0.12em;
 }
 
@@ -513,7 +523,7 @@ body.webgpu-active .timeline-copy {
 .timeline-group h3 {
   margin: 0;
   color: var(--ink);
-  font: 600 clamp(0.86rem, 1.5vw, 1rem)/1.5 var(--mono);
+  font: 600 calc(clamp(0.86rem, 1.5vw, 1rem) * var(--tl-scale))/1.5 var(--mono);
   letter-spacing: 0;
   text-transform: none;
 }
@@ -545,13 +555,13 @@ body.webgpu-active .timeline-copy {
 .timeline-group time {
   padding-top: 0.2rem;
   color: var(--matrix);
-  font: 600 0.72rem/1.5 var(--mono);
+  font: 600 calc(0.72rem * var(--tl-scale))/1.5 var(--mono);
 }
 
 .timeline-page .timeline-group h3,
 .timeline-group h4 {
   margin: 0 0 0.45rem;
-  font: 600 clamp(0.78rem, 1.3vw, 0.9rem)/1.5 var(--mono);
+  font: 600 calc(clamp(0.78rem, 1.3vw, 0.9rem) * var(--tl-scale))/1.5 var(--mono);
   letter-spacing: 0;
 }
 
@@ -565,7 +575,7 @@ body.webgpu-active .timeline-copy {
   max-width: 54rem;
   margin: 0;
   color: var(--ink-muted);
-  font: 400 clamp(0.7rem, 1.15vw, 0.82rem)/1.7 var(--mono);
+  font: 400 calc(clamp(0.7rem, 1.15vw, 0.82rem) * var(--tl-scale))/1.7 var(--mono);
 }
 
 .timeline-page .timeline-group li > div > p {
@@ -583,6 +593,7 @@ body.webgpu-active .timeline-copy {
   margin: 0.65rem 0 0;
   padding: 0;
   list-style: none;
+  font-size: calc(1rem * var(--tl-scale));
 }
 
 .timeline-entry-links li {
@@ -795,7 +806,7 @@ body.webgpu-active .site-footer {
   }
 
   .timeline-copy-header h2 {
-    font-size: clamp(0.78rem, 3.6vw, 0.98rem);
+    font-size: calc(clamp(0.78rem, 3.6vw, 0.98rem) * var(--tl-scale));
   }
 
   .timeline-group {
@@ -809,7 +820,7 @@ body.webgpu-active .site-footer {
   }
 
   .timeline-group time {
-    font-size: 0.7rem;
+    font-size: calc(0.7rem * var(--tl-scale));
   }
 
   .contact-panel {

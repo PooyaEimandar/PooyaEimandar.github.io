@@ -257,7 +257,7 @@ function renderTimelinePage(data: TimelineData, currentYear: number): string {
       <header class="timeline-copy-header">
         <p class="eyebrow">${firstYear} — ${currentYear}</p>
         <h1 id="timeline-page-title">${escapeHtml(data.title)}</h1>
-        <p>${milestoneCount} milestones across graphics, games, publishing, teaching, technology leadership, and cloud platforms.</p>
+        <p>All milestones across graphics, games, publishing, teaching, technology leadership, and cloud platforms.</p>
       </header>
 
 ${sections}
