@@ -494,10 +494,17 @@ body.webgpu-active .timeline-copy {
   text-transform: none;
 }
 
-.timeline-copy-header > p:last-child {
+.timeline-copy-header > p:not(.eyebrow) {
   margin: 0;
   color: var(--ink-muted);
   font: 400 calc(clamp(0.72rem, 1.2vw, 0.86rem) * var(--tl-scale))/1.7 var(--mono);
+}
+
+.timeline-copy-header > .persian-introduction {
+  margin-top: 1rem;
+  font-family: Tahoma, Arial, sans-serif;
+  line-height: 2;
+  text-align: start;
 }
 
 .timeline-group {

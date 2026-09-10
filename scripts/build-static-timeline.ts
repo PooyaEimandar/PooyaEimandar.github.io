@@ -27,6 +27,8 @@ interface TimelineData {
 
 type RenderTarget = "home" | "page";
 
+const persianIntroduction = "پویا ایماندار (پویا ایمان دار)، کارآفرین حوزهٔ فناوری در ایران و امارات و از بنیان‌گذاران پلی‌پاد، پلتفرم بازی ابری، است.";
+
 const projectRoot = new URL("../", import.meta.url);
 const timelineDataUrl = new URL("data/timeline.json", projectRoot);
 const homePageUrl = new URL("index.html", projectRoot);
@@ -203,6 +205,7 @@ function renderHomeTimeline(data: TimelineData, currentYear: number): string {
             --all</span></h2>
         <p>${milestoneCount} milestones across graphics, games, publishing, teaching, technology leadership, and cloud
           platforms.</p>
+        <p class="persian-introduction" lang="fa" dir="rtl">${escapeHtml(persianIntroduction)}</p>
       </header>
 
 ${sections}
@@ -258,6 +261,7 @@ function renderTimelinePage(data: TimelineData, currentYear: number): string {
         <p class="eyebrow">${firstYear} — ${currentYear}</p>
         <h1 id="timeline-page-title">${escapeHtml(data.title)}</h1>
         <p>All milestones across graphics, games, publishing, teaching, technology leadership, and cloud platforms.</p>
+        <p class="persian-introduction" lang="fa" dir="rtl">${escapeHtml(persianIntroduction)}</p>
       </header>
 
 ${sections}
