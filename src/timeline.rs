@@ -288,26 +288,21 @@ fn mobile_header_line_count(section: &TimelineSection) -> usize {
 
 fn build_mobile_entry_lines(entry: &TimelineEntry) -> Vec<TerminalLine> {
     let mut lines = vec![TerminalLine::plain(format!(
-        "| $ history.show {}",
+        "| $ {}",
         terminal_ascii(&entry.year)
     ))];
     append_wrapped_body_with_columns(
         &mut lines,
         "| # ",
         "|   ",
-        &terminal_ascii(&entry.id),
+        &terminal_ascii(&entry.title),
         MOBILE_MAX_TERMINAL_COLUMNS,
-    );
-    let result = format!(
-        "{} :: {}",
-        terminal_ascii(&entry.title),
-        terminal_ascii(&entry.text)
     );
     append_wrapped_body_with_columns(
         &mut lines,
         "| > ",
         "|   ",
-        &result,
+        &terminal_ascii(&entry.text),
         MOBILE_MAX_TERMINAL_COLUMNS,
     );
     append_mobile_link_lines(&mut lines, &entry.links);
@@ -393,19 +388,11 @@ fn build_terminal_stream(
 
     for entry in entries {
         lines.push(TerminalLine::plain(format!(
-            "| $ history.show {}",
+            "| $ {}",
             terminal_ascii(&entry.year)
         )));
-        lines.push(TerminalLine::plain(format!(
-            "| # {}",
-            terminal_ascii(&entry.id)
-        )));
-        let result = format!(
-            "{} :: {}",
-            terminal_ascii(&entry.title),
-            terminal_ascii(&entry.text)
-        );
-        append_wrapped_body(&mut lines, "| > ", &result);
+        append_wrapped_body(&mut lines, "| # ", &terminal_ascii(&entry.title));
+        append_wrapped_body(&mut lines, "| > ", &terminal_ascii(&entry.text));
         append_link_lines(&mut lines, &entry.links);
     }
 
@@ -616,6 +603,13 @@ fn terminal_ascii(text: &str) -> String {
 mod tests {
     use super::*;
 
+    /// `| $ 1987` opens every milestone; `| $ pooya.timeline` and the footer
+    /// prompts never look like a year.
+    fn is_entry_year_line(line: &str) -> bool {
+        line.strip_prefix("| $ ")
+            .is_some_and(|year| year.len() == 4 && year.chars().all(|digit| digit.is_ascii_digit()))
+    }
+
     #[test]
     fn canonical_timeline_keeps_all_entries_in_responsive_terminal_sessions() {
         let document: TimelineDocument = serde_json::from_str(TIMELINE_JSON).unwrap();
@@ -710,6 +704,18 @@ mod tests {
                     .join(" ");
                 for entry in entries {
                     assert!(slide.contains_entry(&entry.id));
+                    assert!(
+                        flattened.contains(&format!("| $ {}", terminal_ascii(&entry.year))),
+                        "slide {} omitted the year prompt for {}",
+                        slide_index + 1,
+                        entry.id
+                    );
+                    assert!(
+                        flattened.contains(&format!("| # {}", terminal_ascii(&entry.title))),
+                        "slide {} omitted or changed the title for {}",
+                        slide_index + 1,
+                        entry.id
+                    );
                     let full_body = terminal_ascii(&entry.text);
                     assert!(
                         flattened.contains(&full_body),
@@ -746,7 +752,11 @@ mod tests {
         assert_eq!(
             slides
                 .iter()
-                .map(|slide| slide.terminal.matches("| $ history.show ").count())
+                .map(|slide| slide
+                    .terminal
+                    .lines()
+                    .filter(|line| is_entry_year_line(line))
+                    .count())
                 .sum::<usize>(),
             entry_count
         );
@@ -832,6 +842,30 @@ mod tests {
                     .collect::<Vec<_>>();
                 assert_eq!(paginated_links, expected_links);
 
+                assert_eq!(
+                    entry_lines.first().map(|line| line.text.as_str()),
+                    Some(format!("| $ {}", terminal_ascii(&entry.year)).as_str()),
+                    "mobile reflow changed the year prompt for {}",
+                    entry.id
+                );
+
+                let title_start = entry_lines
+                    .iter()
+                    .position(|line| line.text.starts_with("| # "))
+                    .expect("entry title line");
+                let title = entry_lines[title_start..]
+                    .iter()
+                    .take_while(|line| !line.text.starts_with("| > "))
+                    .map(|line| line.text.chars().skip(4).collect::<String>())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                assert_eq!(
+                    title,
+                    terminal_ascii(&entry.title),
+                    "mobile reflow changed the title for {}",
+                    entry.id
+                );
+
                 let body_start = entry_lines
                     .iter()
                     .position(|line| line.text.starts_with("| > "))
@@ -844,11 +878,7 @@ mod tests {
                     .join(" ");
                 assert_eq!(
                     body,
-                    format!(
-                        "{} :: {}",
-                        terminal_ascii(&entry.title),
-                        terminal_ascii(&entry.text)
-                    ),
+                    terminal_ascii(&entry.text),
                     "mobile reflow changed the body for {}",
                     entry.id
                 );
