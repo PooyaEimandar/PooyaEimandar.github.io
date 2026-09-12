@@ -27,7 +27,25 @@ interface TimelineData {
 
 type RenderTarget = "home" | "page";
 
+// Deliberately not rendered as page copy. This Persian introduction exists so
+// search engines can associate both spellings of Pooya's name with a Persian
+// description of who he is; it ships as `Person.description` in the JSON-LD of
+// both pages instead of as hidden text, which search engines discount.
 const persianIntroduction = "پویا ایماندار (پویا ایمان دار)، کارآفرین حوزهٔ فناوری در ایران و امارات و از بنیان‌گذاران پلی‌پاد، پلتفرم بازی ابری، است.";
+
+const personStructuredData = {
+  "@context": "https://schema.org",
+  "@type": "Person",
+  name: "Pooya Eimandar",
+  alternateName: ["Pooya Imandar", "پویا ایماندار", "پویا ایمان دار"],
+  description: persianIntroduction,
+  url: "https://pooya.ai/",
+  sameAs: [
+    "https://github.com/PooyaEimandar",
+    "https://www.youtube.com/channel/UC5XZoDB5YHd07WSWeMAYyZQ",
+  ],
+  knowsAbout: ["Rust", "WebGPU", "Real-time graphics", "Game engines", "Cloud gaming"],
+};
 
 const projectRoot = new URL("../", import.meta.url);
 const timelineDataUrl = new URL("data/timeline.json", projectRoot);
@@ -36,6 +54,8 @@ const timelineDirectoryUrl = new URL("timeline/", projectRoot);
 const timelinePageUrl = new URL("timeline/index.html", projectRoot);
 const homeTimelineStart = "    <!-- timeline:generated:start -->";
 const homeTimelineEnd = "    <!-- timeline:generated:end -->";
+const homeStructuredDataStart = "  <!-- structured-data:generated:start -->";
+const homeStructuredDataEnd = "  <!-- structured-data:generated:end -->";
 const argumentsList = process.argv.slice(2);
 const checkOnly = argumentsList.length === 1 && argumentsList[0] === "--check";
 
@@ -138,6 +158,16 @@ function validateTimeline(data: unknown): asserts data is TimelineData {
   });
 }
 
+/// Escapes `<` so the payload can never terminate the surrounding script tag.
+function renderStructuredData(indent: string): string {
+  const json = JSON.stringify(personStructuredData, null, 2)
+    .replaceAll("<", "\\u003C")
+    .split("\n")
+    .map((line) => `${indent}  ${line}`)
+    .join("\n");
+  return `${indent}<script type="application/ld+json">\n${json}\n${indent}</script>`;
+}
+
 function renderLinks(links: TimelineLink[]): string {
   if (links.length === 0) {
     return "";
@@ -205,7 +235,6 @@ function renderHomeTimeline(data: TimelineData, currentYear: number): string {
             --all</span></h2>
         <p>${milestoneCount} milestones across graphics, games, publishing, teaching, technology leadership, and cloud
           platforms.</p>
-        <p class="persian-introduction" lang="fa" dir="rtl">${escapeHtml(persianIntroduction)}</p>
       </header>
 
 ${sections}
@@ -235,6 +264,7 @@ function renderTimelinePage(data: TimelineData, currentYear: number): string {
   <link rel="canonical" href="https://pooya.ai/timeline/">
   <link rel="stylesheet" href="../assets/css/site.css">
   <title>Pooya Eimandar's Timeline</title>
+${renderStructuredData("  ")}
 </head>
 
 <body class="timeline-page">
@@ -247,6 +277,7 @@ function renderTimelinePage(data: TimelineData, currentYear: number): string {
 
     <nav class="primary-nav" aria-label="Primary navigation">
       <a href="/">Home</a>
+      <a href="/webgpu/">WebGPU</a>
       <a href="https://github.com/PooyaEimandar" target="_blank" rel="noopener noreferrer">GitHub</a>
       <a href="https://www.youtube.com/channel/UC5XZoDB5YHd07WSWeMAYyZQ" target="_blank"
         rel="noopener noreferrer">YouTube</a>
@@ -261,7 +292,6 @@ function renderTimelinePage(data: TimelineData, currentYear: number): string {
         <p class="eyebrow">${firstYear} — ${currentYear}</p>
         <h1 id="timeline-page-title">${escapeHtml(data.title)}</h1>
         <p>All milestones across graphics, games, publishing, teaching, technology leadership, and cloud platforms.</p>
-        <p class="persian-introduction" lang="fa" dir="rtl">${escapeHtml(persianIntroduction)}</p>
       </header>
 
 ${sections}
@@ -278,18 +308,24 @@ ${sections}
 `;
 }
 
-function replaceHomeTimeline(homePage: string, timeline: string): string {
-  const start = homePage.indexOf(homeTimelineStart);
-  const end = homePage.indexOf(homeTimelineEnd);
+function replaceMarkedRegion(
+  homePage: string,
+  startMarker: string,
+  endMarker: string,
+  content: string,
+  label: string,
+): string {
+  const start = homePage.indexOf(startMarker);
+  const end = homePage.indexOf(endMarker);
   if (start < 0 || end < 0 || end <= start) {
-    throw new Error("index.html is missing the generated timeline markers.");
+    throw new Error(`index.html is missing the ${label} markers.`);
   }
-  if (homePage.indexOf(homeTimelineStart, start + homeTimelineStart.length) >= 0
-    || homePage.indexOf(homeTimelineEnd, end + homeTimelineEnd.length) >= 0) {
-    throw new Error("index.html must contain exactly one generated timeline marker pair.");
+  if (homePage.indexOf(startMarker, start + startMarker.length) >= 0
+    || homePage.indexOf(endMarker, end + endMarker.length) >= 0) {
+    throw new Error(`index.html must contain exactly one ${label} marker pair.`);
   }
 
-  return `${homePage.slice(0, start)}${homeTimelineStart}\n${timeline}\n${homeTimelineEnd}${homePage.slice(end + homeTimelineEnd.length)}`;
+  return `${homePage.slice(0, start)}${startMarker}\n${content}\n${endMarker}${homePage.slice(end + endMarker.length)}`;
 }
 
 async function writeIfChanged(url: URL, expected: string): Promise<void> {
@@ -318,7 +354,19 @@ validateTimeline(data);
 
 const currentYear = new Date().getUTCFullYear();
 const currentHomePage = await readFile(homePageUrl, "utf8");
-const expectedHomePage = replaceHomeTimeline(currentHomePage, renderHomeTimeline(data, currentYear));
+const expectedHomePage = replaceMarkedRegion(
+  replaceMarkedRegion(
+    currentHomePage,
+    homeStructuredDataStart,
+    homeStructuredDataEnd,
+    renderStructuredData("  "),
+    "generated structured data",
+  ),
+  homeTimelineStart,
+  homeTimelineEnd,
+  renderHomeTimeline(data, currentYear),
+  "generated timeline",
+);
 const expectedTimelinePage = renderTimelinePage(data, currentYear);
 const { milestoneCount } = timelineFacts(data);
 

@@ -105,48 +105,28 @@
           "year": "2013",
           "title": "A dedicated DirectX blog",
           "text": "Launched a companion blog for DirectX 11.1 Game Programming, helping experienced DirectX developers explore newer DirectX 11.x features.",
-          "links": [
-            {
-              "label": "DirectX 11.1 Game Programming blog",
-              "url": "https://directx11-1-gameprogramming.azurewebsites.net/"
-            }
-          ]
+          "links": []
         },
         {
           "id": "uast-lecturer",
           "year": "2013",
           "title": "University lecturer",
           "text": "Became a lecturer at the Iran University of Applied Science and Technology's National Foundation of Computer Games.",
-          "links": [
-            {
-              "label": "National Foundation of Computer Games",
-              "url": "https://www.nfcg-uast.ac.ir/?page_id=373"
-            }
-          ]
+          "links": []
         },
         {
           "id": "igdi-lecturer",
           "year": "2014",
           "title": "Iran Game Development Institute",
           "text": "Became a lecturer at the Iran Game Development Institute.",
-          "links": [
-            {
-              "label": "Iran Game Development Institute",
-              "url": "https://www.irangdi.com/"
-            }
-          ]
+          "links": []
         },
         {
           "id": "modern-cpp",
           "year": "2014",
           "title": "Learning Modern C++",
           "text": "Launched Learning Modern C++ for Game Programmers, a free, open-source self-study project for developers learning modern C++ through game programming.",
-          "links": [
-            {
-              "label": "Learning Modern C++ archive",
-              "url": "https://learningmoderncpp.codeplex.com/"
-            }
-          ]
+          "links": []
         },
         {
           "id": "gaming-healthcare",
@@ -165,12 +145,7 @@
           "year": "2014",
           "title": "IGDF jury panel",
           "text": "Joined the IGDF 2014 jury panel for Best Computer Games Technology.",
-          "links": [
-            {
-              "label": "IGDF 2014",
-              "url": "https://igdf.ir/News/YXnvBTHD35o="
-            }
-          ]
+          "links": []
         },
         {
           "id": "qt-book-reviewer",
@@ -235,7 +210,7 @@
           "links": [
             {
               "label": "Persian Engine archive",
-              "url": "https://persianengine.codeplex.com/"
+              "url": "https://github.com/PooyaEimandar/PersianEngine"
             }
           ]
         },
@@ -267,12 +242,7 @@
           "year": "2010",
           "title": "The Land",
           "text": "Started a prototype of The Land, a third-person shooter built with Persian Engine.",
-          "links": [
-            {
-              "label": "Watch The Land",
-              "url": "https://vimeo.com/106925703"
-            }
-          ]
+          "links": []
         },
         {
           "id": "technology-award",
@@ -375,10 +345,6 @@
           "text": "Joined Fanap as Project Manager of Project Falcon.",
           "links": [
             {
-              "label": "Fanap",
-              "url": "https://fanap.ir/"
-            },
-            {
               "label": "Watch Project Falcon",
               "url": "https://www.youtube.com/watch?v=ygpz35ddZ_4"
             }
@@ -476,7 +442,7 @@
           "links": [
             {
               "label": "WebGPU",
-              "url": "https://pooya.ai/webgpu"
+              "url": "https://pooya.ai/webgpu/"
             }
           ]
         },
