@@ -398,7 +398,7 @@ fn build_terminal_stream(
 
     lines.extend([
         TerminalLine::plain("|"),
-        TerminalLine::plain("| $ input.listen Click/Touch/⏎ to continue"),
+        TerminalLine::plain("| $ Click/Touch/⏎ to continue"),
         TerminalLine::plain("| > READY"),
     ]);
     finish_terminal(lines)
@@ -645,11 +645,7 @@ mod tests {
                     .chars()
                     .all(|character| character.is_ascii() || character == '⏎')
             );
-            assert!(
-                slide
-                    .terminal
-                    .contains("| $ input.listen Click/Touch/⏎ to continue")
-            );
+            assert!(slide.terminal.contains("| $ Click/Touch/⏎ to continue"));
             assert_eq!(slide.line_count(), slide.terminal.lines().count());
             assert!(
                 !slide.terminal.contains("..."),
