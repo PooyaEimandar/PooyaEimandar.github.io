@@ -354,11 +354,19 @@
           "id": "playpod",
           "year": "2018",
           "title": "PlayPod",
-          "text": "Co-founded and led PlayPod, the first cloud-gaming console in Iran and the Middle East.",
+          "text": "He co-founded and led PlayPod, the first cloud-gaming console in Iran and the MENA. He began working on the idea in 2015, inspired by NVIDIA SHIELD and GeForce NOW: enabling gamers to play on any device, anytime and anywhere, through an internet connection and real-time streaming. He built the core technology in C++ based on his in-house game engine called Wolf Engine and brought PlayPod to Android, the web, iOS, and PC. The work began before Microsoft announced Project xCloud or Google announced Stadia, and PlayPod went on to reach gamers across Iran and the Middle East. He also developed a gpu partitioning system based on Wolf Engine, without requiring third-party GPU partitioning licenses, and his team scaled the platform across two data centers with at least 20+ servers and 90+ GPUs. Guided by a ‘less is more’ philosophy, he kept the architecture focused: backend services used Facebook's Proxygen for HTTP/2/3; streaming evolved from RTSP and TCP to SRT and WebRTC; and the cross-platform streaming core was written in C using the Apache Portable Runtime (APR). The applications shared a single Qt codebase, allowing a team of just two C++ developers, including him, to build the entire technology stack. The team later began migrating the stack from C++ to Rust—a transition that gave rise to an open source project called Sib.",
           "links": [
             {
               "label": "PlayPod",
               "url": "https://playpod.ir/"
+            },
+            {
+              "label": "Wolf Engine",
+              "url": "https://github.com/WolfSource/WolfEngine"
+            },
+            {
+              "label": "Sib",
+              "url": "https://github.com/PooyaEimandar/sib"
             }
           ]
         },
