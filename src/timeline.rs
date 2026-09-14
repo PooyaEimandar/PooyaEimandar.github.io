@@ -286,18 +286,31 @@ fn mobile_header_line_count(section: &TimelineSection) -> usize {
     .len()
 }
 
-fn build_mobile_entry_lines(entry: &TimelineEntry) -> Vec<TerminalLine> {
-    let mut lines = vec![TerminalLine::plain(format!(
-        "| $ {}",
-        terminal_ascii(&entry.year)
-    ))];
-    append_wrapped_body_with_columns(
-        &mut lines,
-        "| # ",
-        "|   ",
-        &terminal_ascii(&entry.title),
-        MOBILE_MAX_TERMINAL_COLUMNS,
+/// `| $ 2026 :: AINU` opens a milestone. A wrapped title continues aligned
+/// under its first word; `rail` keeps the mobile `|` gutter.
+fn append_entry_heading(
+    lines: &mut Vec<TerminalLine>,
+    entry: &TimelineEntry,
+    rail: &str,
+    max_columns: usize,
+) {
+    let prefix = format!("| $ {} :: ", terminal_ascii(&entry.year));
+    let continuation = format!(
+        "{rail}{}",
+        " ".repeat(prefix.chars().count() - rail.chars().count())
     );
+    append_wrapped_body_with_columns(
+        lines,
+        &prefix,
+        &continuation,
+        &terminal_ascii(&entry.title),
+        max_columns,
+    );
+}
+
+fn build_mobile_entry_lines(entry: &TimelineEntry) -> Vec<TerminalLine> {
+    let mut lines = Vec::new();
+    append_entry_heading(&mut lines, entry, "|", MOBILE_MAX_TERMINAL_COLUMNS);
     append_wrapped_body_with_columns(
         &mut lines,
         "| > ",
@@ -387,11 +400,7 @@ fn build_terminal_stream(
     ];
 
     for entry in entries {
-        lines.push(TerminalLine::plain(format!(
-            "| $ {}",
-            terminal_ascii(&entry.year)
-        )));
-        append_wrapped_body(&mut lines, "| # ", &terminal_ascii(&entry.title));
+        append_entry_heading(&mut lines, entry, "", MAX_TERMINAL_COLUMNS);
         append_wrapped_body(&mut lines, "| > ", &terminal_ascii(&entry.text));
         append_link_lines(&mut lines, &entry.links);
     }
@@ -603,11 +612,14 @@ fn terminal_ascii(text: &str) -> String {
 mod tests {
     use super::*;
 
-    /// `| $ 1987` opens every milestone; `| $ pooya.timeline` and the footer
-    /// prompts never look like a year.
-    fn is_entry_year_line(line: &str) -> bool {
+    /// `| $ 1987 :: Born` opens every milestone; `| $ pooya.timeline` and the
+    /// footer prompts never look like a year heading.
+    fn is_entry_heading_line(line: &str) -> bool {
         line.strip_prefix("| $ ")
-            .is_some_and(|year| year.len() == 4 && year.chars().all(|digit| digit.is_ascii_digit()))
+            .and_then(|rest| rest.split_once(" :: "))
+            .is_some_and(|(year, _)| {
+                year.len() == 4 && year.chars().all(|digit| digit.is_ascii_digit())
+            })
     }
 
     #[test]
@@ -701,14 +713,12 @@ mod tests {
                 for entry in entries {
                     assert!(slide.contains_entry(&entry.id));
                     assert!(
-                        flattened.contains(&format!("| $ {}", terminal_ascii(&entry.year))),
-                        "slide {} omitted the year prompt for {}",
-                        slide_index + 1,
-                        entry.id
-                    );
-                    assert!(
-                        flattened.contains(&format!("| # {}", terminal_ascii(&entry.title))),
-                        "slide {} omitted or changed the title for {}",
+                        flattened.contains(&format!(
+                            "| $ {} :: {}",
+                            terminal_ascii(&entry.year),
+                            terminal_ascii(&entry.title)
+                        )),
+                        "slide {} omitted or changed the heading for {}",
                         slide_index + 1,
                         entry.id
                     );
@@ -751,7 +761,7 @@ mod tests {
                 .map(|slide| slide
                     .terminal
                     .lines()
-                    .filter(|line| is_entry_year_line(line))
+                    .filter(|line| is_entry_heading_line(line))
                     .count())
                 .sum::<usize>(),
             entry_count
@@ -838,21 +848,26 @@ mod tests {
                     .collect::<Vec<_>>();
                 assert_eq!(paginated_links, expected_links);
 
-                assert_eq!(
-                    entry_lines.first().map(|line| line.text.as_str()),
-                    Some(format!("| $ {}", terminal_ascii(&entry.year)).as_str()),
-                    "mobile reflow changed the year prompt for {}",
+                // Continuation lines must align under the title's first word,
+                // so stripping the heading-prefix width from every line
+                // rebuilds the title exactly.
+                let heading_prefix = format!("| $ {} :: ", terminal_ascii(&entry.year));
+                assert!(
+                    entry_lines
+                        .first()
+                        .is_some_and(|line| line.text.starts_with(&heading_prefix)),
+                    "mobile reflow changed the heading prompt for {}",
                     entry.id
                 );
-
-                let title_start = entry_lines
-                    .iter()
-                    .position(|line| line.text.starts_with("| # "))
-                    .expect("entry title line");
-                let title = entry_lines[title_start..]
+                let title = entry_lines
                     .iter()
                     .take_while(|line| !line.text.starts_with("| > "))
-                    .map(|line| line.text.chars().skip(4).collect::<String>())
+                    .map(|line| {
+                        line.text
+                            .chars()
+                            .skip(heading_prefix.chars().count())
+                            .collect::<String>()
+                    })
                     .collect::<Vec<_>>()
                     .join(" ");
                 assert_eq!(
