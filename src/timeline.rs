@@ -15,6 +15,11 @@ const MOBILE_MAX_TERMINAL_COLUMNS: usize = 27;
 pub const MOBILE_MAX_TERMINAL_LINES: usize = 19;
 pub const MOBILE_MIN_TERMINAL_LINES: usize = 14;
 const MOBILE_FOOTER_LINES: usize = 3;
+const DESKTOP_HEADER_LINES: usize = 5;
+const DESKTOP_FOOTER_LINES: usize = 3;
+const DESKTOP_BODY_LINES: usize = MAX_TERMINAL_LINES - DESKTOP_HEADER_LINES - DESKTOP_FOOTER_LINES;
+// A continued slide spends one body line on `| # continued`.
+const _: () = assert!(DESKTOP_BODY_LINES > 1);
 
 #[derive(Debug, Deserialize)]
 struct TimelineDocument {
@@ -107,21 +112,27 @@ impl TimelineSlide {
 pub fn load_slides() -> Result<Vec<TimelineSlide>, String> {
     let document: TimelineDocument = serde_json::from_str(TIMELINE_JSON)
         .map_err(|error| format!("invalid data/timeline.json: {error}"))?;
-    let section_pages = document
+    let section_drafts = document
         .sections
         .iter()
-        .map(paginate_section_entries)
+        .enumerate()
+        .map(|(section_index, section)| paginate_desktop_section(section_index, section))
         .collect::<Vec<_>>();
-    let slide_count = section_pages.iter().map(Vec::len).sum::<usize>();
+    let slide_count = section_drafts.iter().map(Vec::len).sum::<usize>();
     let mut slides = Vec::with_capacity(slide_count);
 
-    for (section, pages) in document.sections.iter().zip(section_pages) {
-        let page_count = pages.len();
-        for (page_index, entries) in pages.into_iter().enumerate() {
+    for (section, drafts) in document.sections.iter().zip(section_drafts) {
+        let page_count = drafts.len();
+        for (page_index, draft) in drafts.into_iter().enumerate() {
             let slide_index = slides.len();
+            let entries = draft
+                .entry_indices
+                .iter()
+                .filter_map(|&entry_index| section.entries.get(entry_index))
+                .collect::<Vec<_>>();
             let terminal = build_terminal_stream(
                 section,
-                entries,
+                &draft.lines,
                 page_index,
                 page_count,
                 slide_index,
@@ -136,21 +147,12 @@ pub fn load_slides() -> Result<Vec<TimelineSlide>, String> {
                     slide_count
                 ),
                 heading: format!("{}  /  {}", section.title, section.range),
-                summary: format!(
-                    "{} milestone{} — {}",
-                    entries.len(),
-                    if entries.len() == 1 { "" } else { "s" },
-                    entries
-                        .iter()
-                        .map(|entry| entry.title.as_str())
-                        .collect::<Vec<_>>()
-                        .join(" · ")
-                ),
+                summary: slide_summary(&entries, draft.continuation),
                 reveal_times: typing_schedule(&terminal.text),
                 links: terminal.links,
                 terminal: terminal.text,
                 entry_ids: entries.iter().map(|entry| entry.id.clone()).collect(),
-                source_line_start: 0,
+                source_line_start: draft.source_line_start,
                 line_count,
             });
         }
@@ -160,6 +162,9 @@ pub fn load_slides() -> Result<Vec<TimelineSlide>, String> {
         return Err("data/timeline.json has no entries".to_owned());
     }
 
+    for slide in &slides {
+        report_over_budget(slide, MAX_TERMINAL_LINES, MAX_TERMINAL_COLUMNS);
+    }
     Ok(slides)
 }
 
@@ -174,7 +179,6 @@ pub fn load_mobile_slides(max_terminal_lines: usize) -> Result<Vec<TimelineSlide
     let mut drafts = Vec::new();
 
     for (section_index, section) in document.sections.iter().enumerate() {
-        let mut section_drafts = Vec::new();
         let header_lines = mobile_header_line_count(section);
         let first_page_capacity = max_terminal_lines
             .checked_sub(header_lines + MOBILE_FOOTER_LINES)
@@ -191,34 +195,15 @@ pub fn load_mobile_slides(max_terminal_lines: usize) -> Result<Vec<TimelineSlide
             })?;
 
         for (entry_index, entry) in section.entries.iter().enumerate() {
-            let entry_lines = build_mobile_entry_lines(entry);
-            let mut line_start = 0;
-            let mut continuation = 0;
-            while line_start < entry_lines.len() {
-                let capacity = if continuation == 0 {
-                    first_page_capacity
-                } else {
-                    continued_page_capacity
-                };
-                let line_end = (line_start + capacity).min(entry_lines.len());
-                let mut lines =
-                    Vec::with_capacity(line_end - line_start + usize::from(continuation > 0));
-                if continuation > 0 {
-                    lines.push(TerminalLine::plain("| # continued"));
-                }
-                lines.extend_from_slice(&entry_lines[line_start..line_end]);
-                section_drafts.push(MobileSlideDraft {
-                    section_index,
-                    entry_index,
-                    continuation,
-                    source_line_start: line_start,
-                    lines,
-                });
-                line_start = line_end;
-                continuation += 1;
-            }
+            push_entry_chunks(
+                &mut drafts,
+                section_index,
+                entry_index,
+                &build_mobile_entry_lines(entry),
+                first_page_capacity,
+                continued_page_capacity,
+            );
         }
-        drafts.extend(section_drafts);
     }
 
     if drafts.is_empty() {
@@ -228,17 +213,21 @@ pub fn load_mobile_slides(max_terminal_lines: usize) -> Result<Vec<TimelineSlide
     let slide_count = drafts.len();
     let mut slides = Vec::with_capacity(slide_count);
     for (slide_index, draft) in drafts.into_iter().enumerate() {
-        let section = &document.sections[draft.section_index];
-        let entry = &section.entries[draft.entry_index];
+        let Some(section) = document.sections.get(draft.section_index) else {
+            crate::log_error(&format!(
+                "timeline: mobile slide {} references missing section {}; skipping it.",
+                slide_index + 1,
+                draft.section_index,
+            ));
+            continue;
+        };
+        let entries = draft
+            .entry_indices
+            .iter()
+            .filter_map(|&entry_index| section.entries.get(entry_index))
+            .collect::<Vec<_>>();
         let terminal = build_mobile_terminal_stream(section, &draft, slide_index, slide_count);
         let line_count = terminal.text.lines().count();
-        debug_assert!(line_count <= max_terminal_lines);
-        debug_assert!(
-            terminal
-                .text
-                .lines()
-                .all(|line| line.chars().count() <= MOBILE_MAX_TERMINAL_COLUMNS)
-        );
         slides.push(TimelineSlide {
             eyebrow: format!(
                 "{}  ·  {:02}/{:02}",
@@ -247,34 +236,104 @@ pub fn load_mobile_slides(max_terminal_lines: usize) -> Result<Vec<TimelineSlide
                 slide_count
             ),
             heading: format!("{}  /  {}", section.title, section.range),
-            summary: format!(
-                "1 milestone — {}{}",
-                entry.title,
-                if draft.continuation > 0 {
-                    " (continued)"
-                } else {
-                    ""
-                }
-            ),
+            summary: slide_summary(&entries, draft.continuation),
             reveal_times: typing_schedule(&terminal.text),
             links: terminal.links,
             terminal: terminal.text,
-            entry_ids: vec![entry.id.clone()],
+            entry_ids: entries.iter().map(|entry| entry.id.clone()).collect(),
             source_line_start: draft.source_line_start,
             line_count,
         });
     }
 
+    for slide in &slides {
+        report_over_budget(slide, max_terminal_lines, MOBILE_MAX_TERMINAL_COLUMNS);
+    }
     Ok(slides)
 }
 
+/// Reports a slide that outgrew its layout budget without discarding it. The
+/// renderer shrinks an over-tall transcript to fit and clips an over-wide one,
+/// so a console error is more useful than dropping the milestone.
+fn report_over_budget(slide: &TimelineSlide, max_lines: usize, max_columns: usize) {
+    if slide.line_count() > max_lines {
+        crate::log_error(&format!(
+            "timeline: '{}' fills {} lines; the budget is {max_lines}. The slide renders smaller than the rest.",
+            slide.primary_entry_id(),
+            slide.line_count(),
+        ));
+    }
+    for line in slide
+        .terminal
+        .lines()
+        .filter(|line| line.chars().count() > max_columns)
+    {
+        crate::log_error(&format!(
+            "timeline: '{}' has a {}-column line; the budget is {max_columns}. It may clip: {line}",
+            slide.primary_entry_id(),
+            line.chars().count(),
+        ));
+    }
+}
+
+fn slide_summary(entries: &[&TimelineEntry], continuation: usize) -> String {
+    format!(
+        "{} milestone{} — {}{}",
+        entries.len(),
+        if entries.len() == 1 { "" } else { "s" },
+        entries
+            .iter()
+            .map(|entry| entry.title.as_str())
+            .collect::<Vec<_>>()
+            .join(" · "),
+        if continuation > 0 { " (continued)" } else { "" }
+    )
+}
+
+/// The body of one slide, between its header and footer.
 #[derive(Clone, Debug)]
-struct MobileSlideDraft {
+struct SlideDraft {
     section_index: usize,
-    entry_index: usize,
+    entry_indices: Vec<usize>,
     continuation: usize,
     source_line_start: usize,
     lines: Vec<TerminalLine>,
+}
+
+/// Splits one entry across consecutive slides. Each later slide opens with
+/// `| # continued`, so it gets its own, one-line-smaller capacity.
+fn push_entry_chunks(
+    drafts: &mut Vec<SlideDraft>,
+    section_index: usize,
+    entry_index: usize,
+    entry_lines: &[TerminalLine],
+    first_page_capacity: usize,
+    continued_page_capacity: usize,
+) {
+    let mut line_start = 0;
+    let mut continuation = 0;
+    while line_start < entry_lines.len() {
+        let capacity = if continuation == 0 {
+            first_page_capacity
+        } else {
+            continued_page_capacity
+        };
+        let line_end = (line_start + capacity).min(entry_lines.len());
+        let mut lines = Vec::with_capacity(line_end - line_start + usize::from(continuation > 0));
+        if continuation > 0 {
+            lines.push(TerminalLine::plain("| # continued"));
+        }
+        lines.extend_from_slice(&entry_lines[line_start..line_end]);
+        drafts.push(SlideDraft {
+            section_index,
+            entry_indices: vec![entry_index],
+            continuation,
+            source_line_start: line_start,
+            lines,
+        });
+        line_start = line_end;
+        continuation += 1;
+    }
 }
 
 fn mobile_header_line_count(section: &TimelineSection) -> usize {
@@ -324,7 +383,7 @@ fn build_mobile_entry_lines(entry: &TimelineEntry) -> Vec<TerminalLine> {
 
 fn build_mobile_terminal_stream(
     section: &TimelineSection,
-    draft: &MobileSlideDraft,
+    draft: &SlideDraft,
     slide_index: usize,
     slide_count: usize,
 ) -> TerminalBuild {
@@ -353,29 +412,59 @@ fn build_mobile_terminal_stream(
     finish_terminal(lines)
 }
 
-fn paginate_section_entries(section: &TimelineSection) -> Vec<&[TimelineEntry]> {
-    let mut pages = Vec::new();
-    let mut start = 0;
-    while start < section.entries.len() {
-        let mut end = (start + MAX_ENTRIES_PER_SLIDE).min(section.entries.len());
-        while end > start + 1
-            && build_terminal_stream(section, &section.entries[start..end], 0, 1, 0, 99)
-                .text
-                .lines()
-                .count()
-                > MAX_TERMINAL_LINES
-        {
-            end -= 1;
+fn build_desktop_entry_lines(entry: &TimelineEntry) -> Vec<TerminalLine> {
+    let mut lines = Vec::new();
+    append_entry_heading(&mut lines, entry, "", MAX_TERMINAL_COLUMNS);
+    append_wrapped_body(&mut lines, "| > ", &terminal_ascii(&entry.text));
+    append_link_lines(&mut lines, &entry.links);
+    lines
+}
+
+/// Pairs up to `MAX_ENTRIES_PER_SLIDE` whole entries per slide. An entry too
+/// tall for one slide gets consecutive slides of its own, split like the
+/// mobile transcript, and the next entry starts on a fresh slide.
+fn paginate_desktop_section(section_index: usize, section: &TimelineSection) -> Vec<SlideDraft> {
+    let mut drafts = Vec::new();
+    for (entry_index, entry) in section.entries.iter().enumerate() {
+        let entry_lines = build_desktop_entry_lines(entry);
+        if entry_lines.len() > DESKTOP_BODY_LINES {
+            push_entry_chunks(
+                &mut drafts,
+                section_index,
+                entry_index,
+                &entry_lines,
+                DESKTOP_BODY_LINES,
+                DESKTOP_BODY_LINES - 1,
+            );
+            continue;
         }
-        pages.push(&section.entries[start..end]);
-        start = end;
+
+        // A continued slide never takes another entry. Otherwise a blank rail
+        // separates the entries; the header already ends with one.
+        if let Some(draft) = drafts.last_mut().filter(|draft: &&mut SlideDraft| {
+            draft.continuation == 0
+                && draft.entry_indices.len() < MAX_ENTRIES_PER_SLIDE
+                && draft.lines.len() + 1 + entry_lines.len() <= DESKTOP_BODY_LINES
+        }) {
+            draft.lines.push(TerminalLine::plain("|"));
+            draft.lines.extend(entry_lines);
+            draft.entry_indices.push(entry_index);
+        } else {
+            drafts.push(SlideDraft {
+                section_index,
+                entry_indices: vec![entry_index],
+                continuation: 0,
+                source_line_start: 0,
+                lines: entry_lines,
+            });
+        }
     }
-    pages
+    drafts
 }
 
 fn build_terminal_stream(
     section: &TimelineSection,
-    entries: &[TimelineEntry],
+    body: &[TerminalLine],
     page_index: usize,
     page_count: usize,
     slide_index: usize,
@@ -398,13 +487,7 @@ fn build_terminal_stream(
         TerminalLine::plain(format!("| > RANGE :: {}", terminal_ascii(&section.range))),
         TerminalLine::plain("|"),
     ];
-
-    for entry in entries {
-        append_entry_heading(&mut lines, entry, "", MAX_TERMINAL_COLUMNS);
-        append_wrapped_body(&mut lines, "| > ", &terminal_ascii(&entry.text));
-        append_link_lines(&mut lines, &entry.links);
-    }
-
+    lines.extend(body.iter().cloned());
     lines.extend([
         TerminalLine::plain("|"),
         TerminalLine::plain("| $ Click/Touch/⏎ to continue"),
@@ -557,7 +640,6 @@ fn append_mobile_link_lines(lines: &mut Vec<TerminalLine>, links: &[TimelineLink
 fn finish_terminal(lines: Vec<TerminalLine>) -> TerminalBuild {
     let mut text = String::new();
     let mut links = Vec::new();
-    let line_count = lines.len();
 
     for (line_index, line) in lines.into_iter().enumerate() {
         if line_index > 0 {
@@ -576,7 +658,6 @@ fn finish_terminal(lines: Vec<TerminalLine>) -> TerminalBuild {
             });
         }
     }
-    debug_assert_eq!(text.lines().count(), line_count);
     TerminalBuild { text, links }
 }
 
@@ -611,6 +692,21 @@ fn terminal_ascii(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every `| $` prompt after the opening one starts a new block, so it sits
+    /// after exactly one blank `|` rail line.
+    fn assert_prompts_follow_one_blank_rail(terminal: &str) {
+        let lines = terminal.lines().collect::<Vec<_>>();
+        for (index, line) in lines.iter().enumerate().skip(1) {
+            if line.starts_with("| $ ") {
+                assert_eq!(lines[index - 1], "|", "no blank rail before: {line}");
+                assert!(
+                    index < 2 || lines[index - 2] != "|",
+                    "more than one blank rail before: {line}"
+                );
+            }
+        }
+    }
 
     /// `| $ 1987 :: Born` opens every milestone; `| $ pooya.timeline` and the
     /// footer prompts never look like a year heading.
@@ -649,6 +745,7 @@ mod tests {
         );
         for (index, slide) in slides.iter().enumerate() {
             assert!(slide.terminal.starts_with("| $ pooya.timeline"));
+            assert_prompts_follow_one_blank_rail(&slide.terminal);
             assert!(slide.terminal.ends_with("| > READY"));
             assert!(!slide.summary.is_empty());
             assert!(
@@ -659,6 +756,12 @@ mod tests {
             );
             assert!(slide.terminal.contains("| $ Click/Touch/⏎ to continue"));
             assert_eq!(slide.line_count(), slide.terminal.lines().count());
+            assert!(
+                slide.line_count() <= MAX_TERMINAL_LINES,
+                "desktop slide {} has {} lines",
+                index + 1,
+                slide.line_count()
+            );
             assert!(
                 !slide.terminal.contains("..."),
                 "terminal bodies must never be abbreviated"
@@ -701,47 +804,126 @@ mod tests {
             }
         }
 
-        let mut slide_index = 0;
-        for section in &document.sections {
-            for entries in paginate_section_entries(section) {
-                let slide = &slides[slide_index];
-                let flattened = slide
-                    .terminal
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                for entry in entries {
-                    assert!(slide.contains_entry(&entry.id));
-                    assert!(
-                        flattened.contains(&format!(
-                            "| $ {} :: {}",
-                            terminal_ascii(&entry.year),
-                            terminal_ascii(&entry.title)
-                        )),
-                        "slide {} omitted or changed the heading for {}",
-                        slide_index + 1,
-                        entry.id
-                    );
-                    let full_body = terminal_ascii(&entry.text);
-                    assert!(
-                        flattened.contains(&full_body),
-                        "slide {} omitted or changed the body for {}",
-                        slide_index + 1,
-                        entry.id
-                    );
-                    for link in &entry.links {
-                        let full_token = format!("[{}]", terminal_ascii(&link.label));
-                        assert!(
-                            slide.terminal.contains(&full_token),
-                            "slide {} omitted or truncated link token {full_token}",
-                            slide_index + 1
-                        );
-                    }
-                }
-                slide_index += 1;
+        // Rebuild every entry from the slides it spans: drop each slide's
+        // header, footer, and `| # continued` marker, then split the body at
+        // the blank rails that separate paired entries.
+        let entries = document
+            .sections
+            .iter()
+            .flat_map(|section| &section.entries)
+            .collect::<Vec<_>>();
+        let mut rebuilt = vec![Vec::<String>::new(); entries.len()];
+        for slide in &slides {
+            let lines = slide.terminal.lines().collect::<Vec<_>>();
+            let mut body = &lines[DESKTOP_HEADER_LINES..lines.len() - DESKTOP_FOOTER_LINES];
+            if body.first() == Some(&"| # continued") {
+                body = &body[1..];
+            }
+            let segments = body.split(|line| *line == "|").collect::<Vec<_>>();
+            assert_eq!(segments.len(), slide.entry_ids.len());
+            for (entry_id, segment) in slide.entry_ids.iter().zip(segments) {
+                let index = entries
+                    .iter()
+                    .position(|entry| &entry.id == entry_id)
+                    .expect("slide entry exists in the document");
+                rebuilt[index].extend(segment.iter().map(|line| (*line).to_owned()));
             }
         }
-        assert_eq!(slide_index, slides.len());
+        for (entry, rebuilt_lines) in entries.iter().zip(&rebuilt) {
+            let expected = build_desktop_entry_lines(entry)
+                .into_iter()
+                .map(|line| line.text)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                *rebuilt_lines, expected,
+                "desktop pagination changed the rendered lines for {}",
+                entry.id
+            );
+
+            let flattened = rebuilt_lines
+                .join(" ")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            assert!(
+                flattened.starts_with(&format!(
+                    "| $ {} :: {}",
+                    terminal_ascii(&entry.year),
+                    terminal_ascii(&entry.title)
+                )),
+                "desktop transcript omitted or changed the heading for {}",
+                entry.id
+            );
+            assert!(
+                flattened.contains(&terminal_ascii(&entry.text)),
+                "desktop transcript omitted or changed the body for {}",
+                entry.id
+            );
+            for link in &entry.links {
+                let token = format!("[{}]", terminal_ascii(&link.label));
+                assert!(
+                    rebuilt_lines.iter().any(|line| line.contains(&token)),
+                    "desktop transcript omitted or truncated link token {token}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn desktop_splits_an_entry_taller_than_one_slide() {
+        let entry = |id: &str, words: usize| TimelineEntry {
+            id: id.to_owned(),
+            year: "2026".to_owned(),
+            title: id.to_owned(),
+            text: vec!["milestone"; words].join(" "),
+            links: Vec::new(),
+        };
+        let section = TimelineSection {
+            id: "split".to_owned(),
+            title: "Split".to_owned(),
+            range: "2026".to_owned(),
+            entries: vec![
+                entry("first", 3),
+                entry("second", 3),
+                entry("tall", 300),
+                entry("after", 3),
+            ],
+        };
+        let tall_lines = build_desktop_entry_lines(&section.entries[2]);
+        assert!(tall_lines.len() > DESKTOP_BODY_LINES * 2);
+
+        let drafts = paginate_desktop_section(0, &section);
+        for draft in &drafts {
+            assert!(draft.lines.len() <= DESKTOP_BODY_LINES);
+        }
+
+        // Short entries still pair; the tall one never shares a slide.
+        assert_eq!(drafts[0].entry_indices, [0, 1]);
+        let tall = drafts
+            .iter()
+            .filter(|draft| draft.entry_indices == [2])
+            .collect::<Vec<_>>();
+        assert!(tall.len() >= 3);
+        assert_eq!(drafts.last().unwrap().entry_indices, [3]);
+        assert_eq!(drafts.len(), 1 + tall.len() + 1);
+
+        let mut rejoined = Vec::new();
+        for (continuation, draft) in tall.iter().enumerate() {
+            assert_eq!(draft.continuation, continuation);
+            assert_eq!(draft.source_line_start, rejoined.len());
+            let mut lines = draft.lines.iter().map(|line| line.text.as_str());
+            if continuation > 0 {
+                assert_eq!(lines.next(), Some("| # continued"));
+            }
+            rejoined.extend(lines);
+        }
+        assert_eq!(
+            rejoined,
+            tall_lines
+                .iter()
+                .map(|line| line.text.as_str())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -768,6 +950,7 @@ mod tests {
         );
         for slide in &slides {
             assert!(slide.line_count() <= MOBILE_MAX_TERMINAL_LINES);
+            assert_prompts_follow_one_blank_rail(&slide.terminal);
             assert!(slide.terminal.ends_with("| > to continue :: READY"));
             for line in slide.terminal.lines() {
                 assert!(

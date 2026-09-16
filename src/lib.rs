@@ -540,11 +540,11 @@ impl Portfolio {
             Ok(image) => {
                 let dimensions = (image.width, image.height);
                 let Some(layout) = self.portrait_bind_group_layout.as_ref() else {
-                    log_message("Portrait layout is unavailable; keeping transparent fallback");
+                    log_error("Portrait layout is unavailable; keeping transparent fallback");
                     return;
                 };
                 let Some(uniform_buffer) = self.portrait_uniform_buffer.as_ref() else {
-                    log_message("Portrait uniforms are unavailable; keeping transparent fallback");
+                    log_error("Portrait uniforms are unavailable; keeping transparent fallback");
                     return;
                 };
                 match GpuPortrait::from_image(context, layout, uniform_buffer, image) {
@@ -557,13 +557,13 @@ impl Portfolio {
                         ));
                         self.portrait = Some(portrait);
                     }
-                    Err(error) => log_message(&format!(
+                    Err(error) => log_error(&format!(
                         "Portrait upload failed ({error}); keeping transparent fallback",
                     )),
                 }
             }
             Err(error) => {
-                log_message(&format!(
+                log_error(&format!(
                     "Portrait asset unavailable ({error}); keeping transparent fallback",
                 ));
             }
@@ -1125,7 +1125,7 @@ impl Example for Portfolio {
             match self.rebuild_timeline_geometry(context, mobile_line_limit) {
                 Ok(()) if self.renderer_ready_dispatched => self.dispatch_timeline_change(),
                 Ok(()) => {}
-                Err(error) => log_message(&format!(
+                Err(error) => log_error(&format!(
                     "Could not rebuild the responsive timeline geometry: {error}"
                 )),
             }
@@ -1220,11 +1220,9 @@ impl Example for Portfolio {
                         }
                     }
                     TouchPhase::Ended => {
-                        if self
-                            .touch_gesture
-                            .is_some_and(|gesture| gesture.id == touch.id)
+                        if let Some(gesture) =
+                            self.touch_gesture.take_if(|gesture| gesture.id == touch.id)
                         {
-                            let gesture = self.touch_gesture.take().expect("gesture was present");
                             let travel = screen - gesture.start;
                             let swipe_threshold = 34.0 * context.window.scale_factor() as f32;
                             if travel.y.abs() >= swipe_threshold && travel.y.abs() > travel.x.abs()
@@ -1277,7 +1275,7 @@ impl Example for Portfolio {
         }
 
         if let Err(error) = self.ensure_timeline_mesh(context, self.current_slide) {
-            log_message(&format!(
+            log_error(&format!(
                 "Could not build timeline page {}: {error}",
                 self.current_slide + 1
             ));
@@ -1289,7 +1287,7 @@ impl Example for Portfolio {
         if current_page_complete && !self.timeline_meshes.is_empty() {
             let next_slide = (self.current_slide + 1) % self.timeline_meshes.len();
             if let Err(error) = self.ensure_timeline_mesh(context, next_slide) {
-                log_message(&format!(
+                log_error(&format!(
                     "Could not prepare timeline page {}: {error}",
                     next_slide + 1
                 ));
@@ -2236,6 +2234,18 @@ fn log_message(message: &str) {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn log_message(message: &str) {
+    eprintln!("{message}");
+}
+
+/// Reports a failure the renderer recovered from. The scene keeps running, so
+/// the console is the only place the problem surfaces.
+#[cfg(target_arch = "wasm32")]
+fn log_error(message: &str) {
+    web_sys::console::error_1(&wasm_bindgen::JsValue::from_str(message));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn log_error(message: &str) {
     eprintln!("{message}");
 }
 
