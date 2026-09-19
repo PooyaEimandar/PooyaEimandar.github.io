@@ -32,6 +32,15 @@ const TERMINAL_BASE_LINE_HEIGHT: f32 = 0.198;
 const TERMINAL_FONT_SIZE: f32 = TERMINAL_BASE_FONT_SIZE * TERMINAL_TEXT_SCALE;
 const TERMINAL_LINE_HEIGHT: f32 = TERMINAL_BASE_LINE_HEIGHT * TERMINAL_TEXT_SCALE;
 const TERMINAL_DEPTH: f32 = 0.012 * TERMINAL_TEXT_SCALE;
+// Fira Mono advances 600/1000 em, so this is one terminal cell's local width.
+const TERMINAL_CELL_ADVANCE: f32 = TERMINAL_FONT_SIZE * 0.6;
+// Desktop terminal edges as fractions of the visible width. The left edge
+// follows the header's `--page-gutter` (4vw); the right edge stops short of
+// the portrait's face.
+const DESKTOP_TERMINAL_LEFT: f32 = 0.04;
+const DESKTOP_TERMINAL_RIGHT: f32 = 0.46;
+// The widescreen position the desktop layout was tuned at.
+const DESKTOP_TERMINAL_X: f32 = -4.62;
 const MOBILE_TERMINAL_SIZE_MULTIPLIER: f32 = 1.5;
 const MOBILE_TERMINAL_BASE_SCALE: f32 = 0.68 * MOBILE_TERMINAL_SIZE_MULTIPLIER;
 const MOBILE_TERMINAL_BOOSTED_SCALE: f32 = 0.72 * MOBILE_TERMINAL_SIZE_MULTIPLIER;
@@ -1986,17 +1995,16 @@ fn terminal_model(
     let plane_distance = (camera_distance - 1.05).max(0.1);
     let visible_height = 2.0 * plane_distance * (22.0_f32.to_radians()).tan();
     let content_height = line_count.max(1) as f32 * TERMINAL_LINE_HEIGHT;
-    let text_scale = if aspect < 0.8 {
-        base_scale
-    } else {
-        base_scale.min(visible_height * 0.86 / content_height)
-    };
-    let target_x = if aspect >= 1.15 {
-        -4.62
+    let height_scale = base_scale.min(visible_height * 0.86 / content_height);
+    let (target_x, text_scale) = if aspect >= 1.15 {
+        desktop_terminal_placement(visible_height * aspect, height_scale)
     } else if aspect >= MOBILE_TIMELINE_MAX_ASPECT {
-        -2.70
+        (-2.70, height_scale)
     } else {
-        -1.85 * (mobile_scale / MOBILE_TERMINAL_BASE_SCALE)
+        (
+            -1.85 * (mobile_scale / MOBILE_TERMINAL_BASE_SCALE),
+            base_scale,
+        )
     };
     let target_y = if uses_mobile_timeline(aspect) {
         MOBILE_TERMINAL_VERTICAL_OFFSET
@@ -2006,6 +2014,17 @@ fn terminal_model(
     let slide_offset = mix(-camera_distance * 1.45, 0.0, ease_out_cubic(slide_progress));
     glam::Mat4::from_translation(glam::Vec3::new(target_x + slide_offset, target_y, 1.05))
         * glam::Mat4::from_scale(glam::Vec3::splat(text_scale))
+}
+
+/// Returns the desktop terminal's left edge and scale. Narrow desktop windows
+/// move the terminal in to the header's gutter and shrink it until the widest
+/// line, cursor included, ends before the portrait; widescreen windows keep
+/// the tuned position and size.
+fn desktop_terminal_placement(visible_width: f32, max_scale: f32) -> (f32, f32) {
+    let left = DESKTOP_TERMINAL_X.max(visible_width * (DESKTOP_TERMINAL_LEFT - 0.5));
+    let right = visible_width * (DESKTOP_TERMINAL_RIGHT - 0.5);
+    let widest_line = (timeline::MAX_TERMINAL_COLUMNS + 1) as f32 * TERMINAL_CELL_ADVANCE;
+    (left, max_scale.min((right - left) / widest_line))
 }
 
 fn raycast_terminal_plane(
@@ -2657,6 +2676,10 @@ mod tests {
         let double_pipe =
             text_mesh::TextMesh::from_font_bytes(FONT_BYTES, "||", [1.0; 4], options).unwrap();
         let cell_advance = double_pipe.bounds.width() - pipe.bounds.width();
+        assert!(
+            (cell_advance - TERMINAL_CELL_ADVANCE).abs() < 1.0e-4,
+            "desktop layout assumes a {TERMINAL_CELL_ADVANCE} cell; Fira Mono measures {cell_advance}"
+        );
 
         for viewport in [
             glam::Vec2::new(320.0, 493.0),
@@ -2664,7 +2687,15 @@ mod tests {
             glam::Vec2::new(390.0, 844.0),
             glam::Vec2::new(390.0, 700.0),
             glam::Vec2::new(768.0, 1024.0),
+            // Desktop layout from its 1.15 threshold up to ultrawide; the
+            // middle of that range once clipped the terminal's left edge.
+            glam::Vec2::new(1152.0, 1000.0),
+            glam::Vec2::new(1000.0, 804.0),
+            glam::Vec2::new(1024.0, 768.0),
+            glam::Vec2::new(1280.0, 800.0),
             glam::Vec2::new(1440.0, 900.0),
+            glam::Vec2::new(1920.0, 1080.0),
+            glam::Vec2::new(2560.0, 1080.0),
         ] {
             let aspect = viewport.x / viewport.y;
             let mobile_line_limit = responsive_mobile_line_limit(viewport, 1.0);
@@ -2714,6 +2745,16 @@ mod tests {
                     "{} lines exceed the {viewport:?} viewport: NDC {min_ndc:?}..{max_ndc:?}",
                     slide.line_count()
                 );
+                if aspect >= 1.15 {
+                    assert!(
+                        min_ndc.x >= DESKTOP_TERMINAL_LEFT * 2.0 - 1.0 - 0.01,
+                        "desktop terminal crosses the header gutter at {viewport:?}: NDC {min_ndc:?}"
+                    );
+                    assert!(
+                        max_ndc.x <= DESKTOP_TERMINAL_RIGHT * 2.0 - 1.0 + 0.01,
+                        "desktop terminal reaches the portrait at {viewport:?}: NDC {max_ndc:?}"
+                    );
+                }
 
                 if mobile_line_limit.is_some() {
                     let legacy_scale = mix(
