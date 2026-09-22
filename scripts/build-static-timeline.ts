@@ -261,6 +261,12 @@ function renderTimelinePage(data: TimelineData, currentYear: number): string {
   <meta property="og:title" content="Pooya Eimandar's Timeline">
   <meta property="og:description" content="Pooya Eimandar's milestones across graphics, games, publishing, teaching, and technology leadership.">
   <meta property="og:url" content="https://pooya.ai/timeline/">
+  <meta property="og:image" content="https://github.com/PooyaEimandar.png?size=512">
+  <meta property="og:image:alt" content="Pooya Eimandar">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Pooya Eimandar's Timeline">
+  <meta name="twitter:description" content="Pooya Eimandar's milestones across graphics, games, publishing, teaching, and technology leadership.">
+  <meta name="twitter:image" content="https://github.com/PooyaEimandar.png?size=512">
   <link rel="canonical" href="https://pooya.ai/timeline/">
   <link rel="stylesheet" href="../assets/css/site.css">
   <title>Pooya Eimandar's Timeline</title>
