@@ -669,6 +669,14 @@ body.webgpu-active .site-footer {
   letter-spacing: 0.04em;
 }
 
+/* Centred, stacked footer matching the WebGPU section's. */
+.timeline-page .site-footer {
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: center;
+}
+
 .site-footer p {
   margin: 0;
 }
