@@ -283,6 +283,7 @@ ${renderStructuredData("  ")}
 
     <nav class="primary-nav" aria-label="Primary navigation">
       <a href="/">Home</a>
+      <a href="/notes/">Notes</a>
       <a href="/webgpu/">WebGPU</a>
       <a href="https://github.com/PooyaEimandar" target="_blank" rel="noopener noreferrer">GitHub</a>
       <a href="https://www.youtube.com/channel/UC5XZoDB5YHd07WSWeMAYyZQ" target="_blank"
@@ -305,7 +306,7 @@ ${sections}
   </main>
 
   <footer class="site-footer">
-    <p><a href="/">Open the interactive WebGPU timeline</a></p>
+    <p><a href="/">Go to the interactive timeline</a></p>
     <p>© ${currentYear} Pooya Eimandar. All rights reserved.</p>
   </footer>
 </body>
