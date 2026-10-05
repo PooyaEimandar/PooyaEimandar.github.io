@@ -216,21 +216,24 @@ ${section.entries.map((entry) => renderEntry(entry, target)).join("\n")}
       </section>`;
 }
 
-function timelineFacts(data: TimelineData): { firstYear: number; milestoneCount: number } {
-  const entries = data.sections.flatMap((section) => section.entries);
+// Every fact comes from the data, never from the clock: the same JSON has to
+// generate the same HTML next year, or `--check` would call this year's stale.
+function timelineFacts(data: TimelineData): { firstYear: number; lastYear: number; milestoneCount: number } {
+  const years = data.sections.flatMap((section) => section.entries).map((entry) => Number(entry.year));
   return {
-    firstYear: Math.min(...entries.map((entry) => Number(entry.year))),
-    milestoneCount: entries.length,
+    firstYear: Math.min(...years),
+    lastYear: Math.max(...years),
+    milestoneCount: years.length,
   };
 }
 
-function renderHomeTimeline(data: TimelineData, currentYear: number): string {
-  const { firstYear, milestoneCount } = timelineFacts(data);
+function renderHomeTimeline(data: TimelineData): string {
+  const { firstYear, lastYear, milestoneCount } = timelineFacts(data);
   const sections = data.sections.map((section) => renderSection(section, "home")).join("\n\n");
 
   return `    <section class="timeline-copy" id="timeline-copy" aria-labelledby="timeline-copy-title">
       <header class="timeline-copy-header">
-        <p class="eyebrow">${firstYear} — ${currentYear}</p>
+        <p class="eyebrow">${firstYear} — ${lastYear}</p>
         <h2 id="timeline-copy-title" aria-label="${escapeHtml(data.title)}"><span aria-hidden="true">pooya@timeline:~$ history
             --all</span></h2>
         <p>${milestoneCount} milestones across graphics, games, publishing, teaching, technology leadership, and cloud
@@ -241,8 +244,8 @@ ${sections}
     </section>`;
 }
 
-function renderTimelinePage(data: TimelineData, currentYear: number): string {
-  const { firstYear, milestoneCount } = timelineFacts(data);
+function renderTimelinePage(data: TimelineData): string {
+  const { firstYear, lastYear } = timelineFacts(data);
   const sections = data.sections.map((section) => renderSection(section, "page")).join("\n\n");
 
   return `<!doctype html>
@@ -277,7 +280,7 @@ ${renderStructuredData("  ")}
   <a class="skip-link" href="#timeline-content">Skip to the timeline</a>
 
   <header class="site-header" aria-label="Site header">
-    <a class="wordmark" href="/" aria-label="Return to the WebGPU experience">
+    <a class="wordmark" href="/">
       <span class="wordmark-name">Stay Hungry, Stay Foolish</span>
     </a>
 
@@ -296,7 +299,7 @@ ${renderStructuredData("  ")}
   <main id="timeline-content">
     <article class="timeline-copy" aria-labelledby="timeline-page-title">
       <header class="timeline-copy-header">
-        <p class="eyebrow">${firstYear} — ${currentYear}</p>
+        <p class="eyebrow">${firstYear} — ${lastYear}</p>
         <h1 id="timeline-page-title">${escapeHtml(data.title)}</h1>
         <p>All milestones across graphics, games, publishing, teaching, technology leadership, and cloud platforms.</p>
       </header>
@@ -307,8 +310,13 @@ ${sections}
 
   <footer class="site-footer">
     <p><a href="/">Go to the interactive timeline</a></p>
-    <p>© ${currentYear} Pooya Eimandar. All rights reserved.</p>
+    <p>© <time id="copyright-year" datetime="${lastYear}">${lastYear}</time> Pooya Eimandar. All rights reserved.</p>
   </footer>
+  <script>
+    // The page is generated ahead of time; this keeps the copyright year current.
+    const copyrightYear = document.getElementById("copyright-year");
+    copyrightYear.dateTime = copyrightYear.textContent = new Date().getFullYear();
+  </script>
 </body>
 
 </html>
@@ -359,7 +367,6 @@ const timelineJson = await readFile(timelineDataUrl, "utf8");
 const data: unknown = JSON.parse(timelineJson);
 validateTimeline(data);
 
-const currentYear = new Date().getUTCFullYear();
 const currentHomePage = await readFile(homePageUrl, "utf8");
 const expectedHomePage = replaceMarkedRegion(
   replaceMarkedRegion(
@@ -371,10 +378,10 @@ const expectedHomePage = replaceMarkedRegion(
   ),
   homeTimelineStart,
   homeTimelineEnd,
-  renderHomeTimeline(data, currentYear),
+  renderHomeTimeline(data),
   "generated timeline",
 );
-const expectedTimelinePage = renderTimelinePage(data, currentYear);
+const expectedTimelinePage = renderTimelinePage(data);
 const { milestoneCount } = timelineFacts(data);
 
 if (checkOnly) {

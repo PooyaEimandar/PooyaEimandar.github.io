@@ -1,10 +1,11 @@
 mod portrait;
 mod timeline;
 
+#[cfg(target_arch = "wasm32")]
+use std::cell::RefCell;
 use std::{
-    cell::RefCell,
     rc::Rc,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicU32, Ordering},
 };
 
 use bytemuck::{Pod, Zeroable};
@@ -26,6 +27,18 @@ const MATRIX_SIGNAL_MIN_INTERVAL: f32 = 30.0;
 const MATRIX_SIGNAL_MAX_INTERVAL: f32 = 60.0;
 const MATRIX_SIGNAL_DURATION: f32 = 8.0;
 const SLIDE_DURATION: f32 = 0.82;
+// The shaders' clock wraps at this many seconds, so an f32 still resolves
+// single frames however long the page stays open.
+const SCENE_TIME_PERIOD: f64 = 4096.0;
+// Vertical wheel travel, in CSS pixels, that turns one page.
+const WHEEL_TURN_PIXELS: f32 = 40.0;
+const WHEEL_LINE_PIXELS: f32 = 40.0;
+// A wheel gesture ends once the wheel has been quiet for this many seconds.
+const WHEEL_GESTURE_GAP: f32 = 0.2;
+// The page header's height in CSS pixels until the browser reports its own.
+const DEFAULT_HEADER_HEIGHT: f32 = 88.0;
+// Clear CSS pixels between the terminal and the header or copyright line.
+const LAYOUT_SAFETY_MARGIN: f32 = 4.0;
 const TERMINAL_TEXT_SCALE: f32 = 1.5;
 const TERMINAL_BASE_FONT_SIZE: f32 = 0.142;
 const TERMINAL_BASE_LINE_HEIGHT: f32 = 0.198;
@@ -64,6 +77,16 @@ const _: () = assert!(MOBILE_TERMINAL_BOOST_END_ASPECT < MOBILE_TIMELINE_MAX_ASP
 
 static REDUCED_MOTION: AtomicBool = AtomicBool::new(false);
 static PRIMARY_ACTION_REQUEST: AtomicBool = AtomicBool::new(false);
+static HEADER_HEIGHT: AtomicU32 = AtomicU32::new(DEFAULT_HEADER_HEIGHT.to_bits());
+static LAYOUT_DIRTY: AtomicBool = AtomicBool::new(false);
+
+fn header_height() -> f32 {
+    f32::from_bits(HEADER_HEIGHT.load(Ordering::Relaxed))
+}
+
+fn scene_time(elapsed: f64) -> f32 {
+    (elapsed % SCENE_TIME_PERIOD) as f32
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TerminalPrimaryAction {
@@ -82,11 +105,44 @@ fn terminal_primary_action(
     }
 }
 
+/// One scroll gesture turns one page: a wheel notch, or a whole trackpad swipe
+/// together with the inertia that trails it.
+#[derive(Clone, Copy, Debug, Default)]
+struct WheelGesture {
+    travel: f32,
+    idle: f32,
+    turned: bool,
+}
+
+impl WheelGesture {
+    /// Takes one wheel event's vertical travel in CSS pixels and returns the
+    /// page turn it completes, if any.
+    fn scroll(&mut self, pixels: f32) -> Option<i32> {
+        self.idle = 0.0;
+        if self.turned {
+            return None;
+        }
+        self.travel += pixels;
+        if self.travel.abs() < WHEEL_TURN_PIXELS {
+            return None;
+        }
+        self.turned = true;
+        Some(if self.travel < 0.0 { 1 } else { -1 })
+    }
+
+    fn tick(&mut self, dt: f32) {
+        self.idle += dt;
+        if self.idle >= WHEEL_GESTURE_GAP {
+            *self = Self::default();
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct MatrixSignalSchedule {
     rng_state: u32,
-    next_start: f32,
-    active_start: f32,
+    next_start: f64,
+    active_start: f64,
     column: f32,
 }
 
@@ -95,7 +151,7 @@ impl MatrixSignalSchedule {
         let mut schedule = Self {
             rng_state: seed.max(1),
             next_start: 0.0,
-            active_start: -MATRIX_SIGNAL_DURATION,
+            active_start: -f64::from(MATRIX_SIGNAL_DURATION),
             column: 0.5,
         };
         schedule.next_start = schedule.random_interval();
@@ -111,12 +167,14 @@ impl MatrixSignalSchedule {
         value as f32 / u32::MAX as f32
     }
 
-    fn random_interval(&mut self) -> f32 {
-        MATRIX_SIGNAL_MIN_INTERVAL
-            + self.next_random() * (MATRIX_SIGNAL_MAX_INTERVAL - MATRIX_SIGNAL_MIN_INTERVAL)
+    fn random_interval(&mut self) -> f64 {
+        f64::from(
+            MATRIX_SIGNAL_MIN_INTERVAL
+                + self.next_random() * (MATRIX_SIGNAL_MAX_INTERVAL - MATRIX_SIGNAL_MIN_INTERVAL),
+        )
     }
 
-    fn update(&mut self, elapsed: f32) {
+    fn update(&mut self, elapsed: f64) {
         if elapsed >= self.next_start {
             self.active_start = elapsed;
             // Keep the complete atlas glyph cell away from a clipped edge column.
@@ -125,11 +183,13 @@ impl MatrixSignalSchedule {
         }
     }
 
-    fn uniforms(self, elapsed: f32, motion_enabled: bool) -> [f32; 4] {
-        let age = elapsed - self.active_start;
+    /// The shader subtracts the start from its own clock, so the start is
+    /// expressed on that wrapped clock rather than in seconds since launch.
+    fn uniforms(self, elapsed: f64, scene_time: f32, motion_enabled: bool) -> [f32; 4] {
+        let age = (elapsed - self.active_start) as f32;
         let active = motion_enabled && (0.0..MATRIX_SIGNAL_DURATION).contains(&age);
         [
-            self.active_start,
+            scene_time - age,
             MATRIX_SIGNAL_DURATION,
             self.column,
             if active { 1.0 } else { 0.0 },
@@ -189,8 +249,6 @@ fn copyright_notice() -> String {
 thread_local! {
     static LINK_PICK_SNAPSHOT: RefCell<Option<LinkPickSnapshot>> = const { RefCell::new(None) };
 }
-
-type PendingPortrait = Rc<RefCell<Option<Result<RgbaKtxImage, String>>>>;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -337,7 +395,7 @@ impl GpuPortrait {
             },
         )?;
         // The production KTX is a square alpha canvas. Retain the same layout
-        // while the asynchronous browser fetch is pending.
+        // when the scene has to run without it.
         portrait.aspect_ratio = 1.0;
         Ok(portrait)
     }
@@ -368,6 +426,15 @@ impl GpuTextMesh {
             cell_advance: mesh.cell_advance,
             links: Rc::new(mesh.links.clone()),
         }
+    }
+}
+
+/// A browser returns a dropped buffer's memory only when it next collects
+/// garbage. One slide holds several megabytes, so hand them back right away.
+impl Drop for GpuTextMesh {
+    fn drop(&mut self) {
+        self.vertex_buffer.destroy();
+        self.index_buffer.destroy();
     }
 }
 
@@ -415,11 +482,9 @@ struct TouchGesture {
 }
 
 struct Portfolio {
-    pending_portrait: PendingPortrait,
     pipelines: Option<Pipelines>,
     matrix_uniform_buffer: Option<wgpu::Buffer>,
     matrix_glyph_atlas: Option<GpuMatrixGlyphAtlas>,
-    portrait_bind_group_layout: Option<wgpu::BindGroupLayout>,
     portrait_uniform_buffer: Option<wgpu::Buffer>,
     text_uniform_buffer: Option<wgpu::Buffer>,
     text_bind_group: Option<wgpu::BindGroup>,
@@ -431,28 +496,27 @@ struct Portfolio {
     copyright_notice: String,
     depth: Option<texture::Texture>,
     frame_stats: FrameStats,
-    elapsed: f32,
+    /// Seconds since launch. An f32 here would stop resolving single frames
+    /// after a few hours and stop advancing altogether after a few days.
+    elapsed: f64,
     matrix_signal: MatrixSignalSchedule,
     section_age: f32,
     slide_progress: f32,
     current_slide: usize,
-    wheel_accumulator: f32,
+    wheel: WheelGesture,
     cursor_position: Option<glam::Vec2>,
     touch_gesture: Option<TouchGesture>,
     hovered_link: Option<usize>,
-    portrait_load_consumed: bool,
     has_encoded_frame: bool,
     renderer_ready_dispatched: bool,
 }
 
 impl Portfolio {
-    fn new(pending_portrait: PendingPortrait) -> Self {
+    fn new() -> Self {
         Self {
-            pending_portrait,
             pipelines: None,
             matrix_uniform_buffer: None,
             matrix_glyph_atlas: None,
-            portrait_bind_group_layout: None,
             portrait_uniform_buffer: None,
             text_uniform_buffer: None,
             text_bind_group: None,
@@ -469,21 +533,26 @@ impl Portfolio {
             section_age: 0.0,
             slide_progress: 0.0,
             current_slide: 0,
-            wheel_accumulator: 0.0,
+            wheel: WheelGesture::default(),
             cursor_position: None,
             touch_gesture: None,
             hovered_link: None,
-            portrait_load_consumed: false,
             has_encoded_frame: false,
             renderer_ready_dispatched: false,
         }
+    }
+
+    /// Seconds since launch for the intro's milestones. Those all pass within
+    /// the first few seconds, where an f32 is exact enough.
+    fn intro_time(&self) -> f32 {
+        self.elapsed as f32
     }
 
     fn navigate(&mut self, delta: i32) {
         if self.timeline_meshes.is_empty() || delta == 0 {
             return;
         }
-        self.elapsed = self.elapsed.max(TIMELINE_START);
+        self.elapsed = self.elapsed.max(f64::from(TIMELINE_START));
         let count = self.timeline_meshes.len() as i32;
         self.current_slide = (self.current_slide as i32 + delta).rem_euclid(count) as usize;
         self.section_age = 0.0;
@@ -494,7 +563,20 @@ impl Portfolio {
         };
         self.hovered_link = None;
         self.touch_gesture = None;
+        self.release_distant_meshes();
         self.dispatch_timeline_change();
+    }
+
+    /// Frees every mesh but the current slide's and its two neighbours', the
+    /// only slides a reader can reach in one step.
+    fn release_distant_meshes(&mut self) {
+        let count = self.timeline_meshes.len();
+        let current = self.current_slide;
+        for (index, mesh) in self.timeline_meshes.iter_mut().enumerate() {
+            if !is_within_one_slide(index, current, count) {
+                *mesh = None;
+            }
+        }
     }
 
     fn perform_primary_action(&mut self) {
@@ -510,7 +592,7 @@ impl Portfolio {
                 // A primary action during typing completes the current page. It
                 // also completes its entrance opacity/translation so the whole
                 // terminal becomes readable in the same rendered frame.
-                self.elapsed = self.elapsed.max(TIMELINE_START + 0.42);
+                self.elapsed = self.elapsed.max(f64::from(TIMELINE_START + 0.42));
                 self.slide_progress = 1.0;
                 self.section_age = typing_duration + f32::EPSILON;
                 self.hovered_link = None;
@@ -523,7 +605,7 @@ impl Portfolio {
         if self.timeline_meshes.is_empty() {
             return;
         }
-        self.elapsed = self.elapsed.max(TIMELINE_START);
+        self.elapsed = self.elapsed.max(f64::from(TIMELINE_START));
         self.current_slide = index.min(self.timeline_meshes.len() - 1);
         self.section_age = 0.0;
         self.slide_progress = if REDUCED_MOTION.load(Ordering::Relaxed) {
@@ -533,64 +615,38 @@ impl Portfolio {
         };
         self.hovered_link = None;
         self.touch_gesture = None;
+        self.release_distant_meshes();
         self.dispatch_timeline_change();
     }
 
-    fn consume_portrait_load(&mut self, context: &RenderContext) {
-        if self.portrait_load_consumed {
-            return;
-        }
-        let result = self.pending_portrait.borrow_mut().take();
-        let Some(result) = result else {
-            return;
-        };
-        self.portrait_load_consumed = true;
-        match result {
-            Ok(image) => {
-                let dimensions = (image.width, image.height);
-                let Some(layout) = self.portrait_bind_group_layout.as_ref() else {
-                    log_error("Portrait layout is unavailable; keeping transparent fallback");
-                    return;
-                };
-                let Some(uniform_buffer) = self.portrait_uniform_buffer.as_ref() else {
-                    log_error("Portrait uniforms are unavailable; keeping transparent fallback");
-                    return;
-                };
-                match GpuPortrait::from_image(context, layout, uniform_buffer, image) {
-                    Ok(portrait) => {
-                        log_message(&format!(
-                            "Loaded Matrix portrait from {} ({}x{})",
-                            portrait::PORTRAIT_KTX_URL,
-                            dimensions.0,
-                            dimensions.1,
-                        ));
-                        self.portrait = Some(portrait);
-                    }
-                    Err(error) => log_error(&format!(
-                        "Portrait upload failed ({error}); keeping transparent fallback",
-                    )),
-                }
-            }
-            Err(error) => {
-                log_error(&format!(
-                    "Portrait asset unavailable ({error}); keeping transparent fallback",
-                ));
-            }
-        }
+    /// The camera and the current slide's placement for this frame.
+    fn terminal_transform(&self, context: &RenderContext) -> (glam::Mat4, glam::Mat4) {
+        let aspect = context.aspect_ratio().max(0.01);
+        let (view_projection, camera_distance) = responsive_camera(aspect);
+        let line_count = self
+            .timeline_slides
+            .get(self.current_slide)
+            .map(TimelineSlide::line_count)
+            .unwrap_or(1);
+        let model = terminal_model(
+            aspect,
+            camera_distance,
+            self.slide_progress,
+            line_count,
+            context_layout_band(context),
+        );
+        (view_projection, model)
     }
 
     fn update_uniforms(&self, context: &RenderContext) {
         let reduced = REDUCED_MOTION.load(Ordering::Relaxed);
         let motion = if reduced { 0.0 } else { 1.0 };
         let aspect = context.aspect_ratio().max(0.01);
-        let (view_projection, camera_distance) = responsive_camera(aspect);
+        let (view_projection, text_model) = self.terminal_transform(context);
+        let scene_time = scene_time(self.elapsed);
+        let intro_time = self.intro_time();
         let matrix = MatrixUniforms {
-            timing: [
-                self.elapsed,
-                smoothstep(0.0, 0.55, self.elapsed),
-                motion,
-                19.86,
-            ],
+            timing: [scene_time, smoothstep(0.0, 0.55, intro_time), motion, 19.86],
             viewport: [
                 context.surface_config.width as f32,
                 context.surface_config.height as f32,
@@ -598,17 +654,19 @@ impl Portfolio {
                 (context.surface_config.width as f32 / 15.0).clamp(34.0, 112.0),
             ],
             // start time, travel duration, normalized column, active flag
-            signal: self.matrix_signal.uniforms(self.elapsed, !reduced),
+            signal: self
+                .matrix_signal
+                .uniforms(self.elapsed, scene_time, !reduced),
         };
 
-        let reveal = smoothstep(MATRIX_INTRO_END, FACE_REVEAL_END, self.elapsed);
+        let reveal = smoothstep(MATRIX_INTRO_END, FACE_REVEAL_END, intro_time);
         let texture_aspect = self
             .portrait
             .as_ref()
             .map(|portrait| portrait.aspect_ratio)
             .unwrap_or(1.0);
         let portrait = PortraitUniforms {
-            timing: [self.elapsed, reveal, reveal, motion],
+            timing: [scene_time, reveal, reveal, motion],
             viewport: [
                 context.surface_config.width as f32,
                 context.surface_config.height as f32,
@@ -623,14 +681,7 @@ impl Portfolio {
             eyes: [0.402, 0.435, 0.619, 0.433],
         };
 
-        let terminal_lines = self
-            .timeline_slides
-            .get(self.current_slide)
-            .map(TimelineSlide::line_count)
-            .unwrap_or(1);
-        let text_model =
-            terminal_model(aspect, camera_distance, self.slide_progress, terminal_lines);
-        let text_opacity = smoothstep(TIMELINE_START, TIMELINE_START + 0.42, self.elapsed)
+        let text_opacity = smoothstep(TIMELINE_START, TIMELINE_START + 0.42, intro_time)
             * smoothstep(0.0, 0.38, self.slide_progress);
         let typed_characters = self
             .timeline_slides
@@ -647,7 +698,7 @@ impl Portfolio {
         let text = TextUniforms {
             view_projection: view_projection.to_cols_array_2d(),
             model: text_model.to_cols_array_2d(),
-            params: [self.elapsed, text_opacity, typed_characters, motion],
+            params: [scene_time, text_opacity, typed_characters, motion],
         };
 
         if let Some(buffer) = &self.matrix_uniform_buffer {
@@ -690,14 +741,7 @@ impl Portfolio {
             return Ok(());
         };
         let reduced = REDUCED_MOTION.load(Ordering::Relaxed);
-        let aspect = context.aspect_ratio().max(0.01);
-        let (view_projection, camera_distance) = responsive_camera(aspect);
-        let model = terminal_model(
-            aspect,
-            camera_distance,
-            self.slide_progress,
-            slide.line_count(),
-        );
+        let (view_projection, model) = self.terminal_transform(context);
         let viewport = glam::Vec2::new(
             context.surface_config.width as f32,
             context.surface_config.height as f32,
@@ -708,7 +752,7 @@ impl Portfolio {
             .map(|line| line.chars().count())
             .max()
             .unwrap_or(1);
-        let opacity = smoothstep(TIMELINE_START, TIMELINE_START + 0.42, self.elapsed)
+        let opacity = smoothstep(TIMELINE_START, TIMELINE_START + 0.42, self.intro_time())
             * smoothstep(0.0, 0.38, self.slide_progress);
         let Some(layout) = terminal_overlay_layout(
             viewport,
@@ -742,7 +786,7 @@ impl Portfolio {
                 *character = ' ';
             }
         }
-        let cursor_visible = reduced || (self.elapsed * 1.45).fract() >= 0.42;
+        let cursor_visible = reduced || (scene_time(self.elapsed) * 1.45).fract() >= 0.42;
         if cursor_visible {
             white_layer.push('█');
         }
@@ -804,6 +848,7 @@ impl Portfolio {
             &slide.eyebrow,
             &slide.heading,
             &slide.summary,
+            &slide.entries,
         );
     }
 
@@ -819,27 +864,20 @@ impl Portfolio {
     }
 
     fn hit_test_link(&self, context: &RenderContext, screen: glam::Vec2) -> Option<usize> {
-        if self.elapsed < TIMELINE_START || self.slide_progress < 0.12 {
+        if self.intro_time() < TIMELINE_START || self.slide_progress < 0.12 {
             return None;
         }
         let text_mesh = self
             .timeline_meshes
             .get(self.current_slide)
             .and_then(Option::as_ref)?;
-        let aspect = context.aspect_ratio().max(0.01);
-        let (view_projection, camera_distance) = responsive_camera(aspect);
-        let terminal_lines = self
-            .timeline_slides
-            .get(self.current_slide)
-            .map(TimelineSlide::line_count)
-            .unwrap_or(1);
-        let model = terminal_model(aspect, camera_distance, self.slide_progress, terminal_lines);
+        let (view_projection, model) = self.terminal_transform(context);
         let viewport = glam::Vec2::new(
             context.surface_config.width as f32,
             context.surface_config.height as f32,
         );
         let typed = self.visible_typed_characters();
-        let opacity = smoothstep(TIMELINE_START, TIMELINE_START + 0.42, self.elapsed)
+        let opacity = smoothstep(TIMELINE_START, TIMELINE_START + 0.42, self.intro_time())
             * smoothstep(0.0, 0.38, self.slide_progress);
         pick_terminal_link(
             screen,
@@ -907,26 +945,18 @@ impl Portfolio {
                     })
             })
             .unwrap_or(0);
-        let meshes = if mobile_line_limit.is_some() {
-            let current_mesh = slides
-                .get(current_slide)
-                .map(build_timeline_mesh)
-                .transpose()?
-                .map(|mesh| GpuTextMesh::from_mesh(&context.device, &mesh));
-            let mut meshes = (0..slides.len()).map(|_| None).collect::<Vec<_>>();
-            if let Some(current_mesh) = current_mesh {
-                meshes[current_slide] = Some(current_mesh);
-            }
-            meshes
-        } else {
-            slides
-                .iter()
-                .map(build_timeline_mesh)
-                .collect::<RenderResult<Vec<_>>>()?
-                .iter()
-                .map(|mesh| Some(GpuTextMesh::from_mesh(&context.device, mesh)))
-                .collect()
-        };
+        // Only the slide on screen gets its mesh here. `update` builds the
+        // others as the reader reaches them, and `navigate` frees them again:
+        // meshes for every slide at once cost hundreds of megabytes.
+        let mut meshes = slides.iter().map(|_| None).collect::<Vec<_>>();
+        if let (Some(slide), Some(mesh)) =
+            (slides.get(current_slide), meshes.get_mut(current_slide))
+        {
+            *mesh = Some(GpuTextMesh::from_mesh(
+                &context.device,
+                &build_timeline_mesh(slide)?,
+            ));
+        }
 
         self.timeline_slides = slides;
         self.timeline_meshes = meshes;
@@ -969,6 +999,29 @@ impl Portfolio {
         self.timeline_meshes[slide_index] = Some(GpuTextMesh::from_mesh(&context.device, &mesh));
         Ok(())
     }
+
+    /// Paginates again when the viewport or the page header now leaves room
+    /// for a different number of lines per phone slide.
+    fn refresh_responsive_layout(&mut self, context: &RenderContext) {
+        let mobile_line_limit = responsive_mobile_line_limit(
+            glam::Vec2::new(
+                context.surface_config.width as f32,
+                context.surface_config.height as f32,
+            ),
+            context.window.scale_factor() as f32,
+            header_height(),
+        );
+        if mobile_line_limit == self.mobile_timeline_line_limit {
+            return;
+        }
+        match self.rebuild_timeline_geometry(context, mobile_line_limit) {
+            Ok(()) if self.renderer_ready_dispatched => self.dispatch_timeline_change(),
+            Ok(()) => {}
+            Err(error) => log_error(&format!(
+                "Could not rebuild the responsive timeline geometry: {error}"
+            )),
+        }
+    }
 }
 
 impl Example for Portfolio {
@@ -976,6 +1029,9 @@ impl Example for Portfolio {
         ExampleSettings {
             title: "Pooya Eimandar's Personal Website".to_owned(),
             initial_size: winit::dpi::PhysicalSize::new(1440, 900),
+            // The scene is two full-screen shaders and a page of text. An
+            // integrated GPU draws it without waking a laptop's discrete one.
+            power_preference: wgpu::PowerPreference::LowPower,
             ..Default::default()
         }
     }
@@ -1058,12 +1114,22 @@ impl Example for Portfolio {
             &text_uniform_buffer,
         );
 
-        let portrait = GpuPortrait::transparent_placeholder(
-            context,
-            &portrait_layout,
-            &portrait_uniform_buffer,
-        )
-        .map_err(report_renderer_init_error)?;
+        let portrait = match portrait::load_default_portrait().and_then(|image| {
+            GpuPortrait::from_image(context, &portrait_layout, &portrait_uniform_buffer, image)
+        }) {
+            Ok(portrait) => portrait,
+            Err(error) => {
+                log_error(&format!(
+                    "Portrait unavailable ({error}); the scene runs without it."
+                ));
+                GpuPortrait::transparent_placeholder(
+                    context,
+                    &portrait_layout,
+                    &portrait_uniform_buffer,
+                )
+                .map_err(report_renderer_init_error)?
+            }
+        };
         dispatch_scene_progress(
             "face",
             60,
@@ -1076,7 +1142,6 @@ impl Example for Portfolio {
         });
         self.matrix_uniform_buffer = Some(matrix_uniform_buffer);
         self.matrix_glyph_atlas = Some(matrix_glyph_atlas);
-        self.portrait_bind_group_layout = Some(portrait_layout);
         self.portrait_uniform_buffer = Some(portrait_uniform_buffer);
         self.portrait = Some(portrait);
         self.text_uniform_buffer = Some(text_uniform_buffer);
@@ -1090,6 +1155,7 @@ impl Example for Portfolio {
                     context.surface_config.height as f32,
                 ),
                 context.window.scale_factor() as f32,
+                header_height(),
             ),
         )
         .map_err(report_renderer_init_error)?;
@@ -1123,22 +1189,7 @@ impl Example for Portfolio {
             &context.device,
             &context.surface_config,
         ));
-        let mobile_line_limit = responsive_mobile_line_limit(
-            glam::Vec2::new(
-                context.surface_config.width as f32,
-                context.surface_config.height as f32,
-            ),
-            context.window.scale_factor() as f32,
-        );
-        if mobile_line_limit != self.mobile_timeline_line_limit {
-            match self.rebuild_timeline_geometry(context, mobile_line_limit) {
-                Ok(()) if self.renderer_ready_dispatched => self.dispatch_timeline_change(),
-                Ok(()) => {}
-                Err(error) => log_error(&format!(
-                    "Could not rebuild the responsive timeline geometry: {error}"
-                )),
-            }
-        }
+        self.refresh_responsive_layout(context);
         self.update_uniforms(context);
     }
 
@@ -1183,14 +1234,16 @@ impl Example for Portfolio {
                 true
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                let amount = match delta {
-                    MouseScrollDelta::LineDelta(_, y) => *y,
-                    MouseScrollDelta::PixelDelta(position) => position.y as f32 / 52.0,
+                let pixels = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => *y * WHEEL_LINE_PIXELS,
+                    // winit reports physical pixels, which grow with the
+                    // display's scale factor.
+                    MouseScrollDelta::PixelDelta(position) => {
+                        position.y as f32 / (context.window.scale_factor() as f32).max(f32::EPSILON)
+                    }
                 };
-                self.wheel_accumulator += amount;
-                if self.wheel_accumulator.abs() >= 0.72 {
-                    self.navigate(if self.wheel_accumulator < 0.0 { 1 } else { -1 });
-                    self.wheel_accumulator = 0.0;
+                if let Some(delta) = self.wheel.scroll(pixels) {
+                    self.navigate(delta);
                 }
                 true
             }
@@ -1256,7 +1309,7 @@ impl Example for Portfolio {
                 true
             }
             WindowEvent::Focused(false) => {
-                self.wheel_accumulator = 0.0;
+                self.wheel = WheelGesture::default();
                 self.touch_gesture = None;
                 self.hovered_link = None;
                 context
@@ -1278,6 +1331,10 @@ impl Example for Portfolio {
         self.frame_stats.tick();
         let dt = self.frame_stats.delta_seconds().clamp(0.0, 1.0 / 15.0);
         let reduced = REDUCED_MOTION.load(Ordering::Relaxed);
+        self.wheel.tick(dt);
+        if LAYOUT_DIRTY.swap(false, Ordering::Relaxed) {
+            self.refresh_responsive_layout(context);
+        }
         let primary_requested = PRIMARY_ACTION_REQUEST.swap(false, Ordering::Relaxed);
         if primary_requested {
             self.perform_primary_action();
@@ -1304,18 +1361,17 @@ impl Example for Portfolio {
         }
 
         if reduced {
-            self.elapsed = self.elapsed.max(TIMELINE_START + 1.0);
+            self.elapsed = self.elapsed.max(f64::from(TIMELINE_START + 1.0));
             self.slide_progress = 1.0;
         } else {
-            self.elapsed += dt;
-            if self.elapsed >= TIMELINE_START {
+            self.elapsed += f64::from(dt);
+            if self.intro_time() >= TIMELINE_START {
                 self.slide_progress = (self.slide_progress + dt / SLIDE_DURATION).min(1.0);
                 self.section_age += dt;
             }
         }
         self.matrix_signal.update(self.elapsed);
 
-        self.consume_portrait_load(context);
         if let Some(screen) = self.cursor_position {
             self.update_hovered_link(context, screen);
         }
@@ -1362,13 +1418,13 @@ impl Example for Portfolio {
         pass.set_bind_group(0, &matrix_glyph_atlas.bind_group, &[]);
         pass.draw(0..3, 0..1);
 
-        if self.elapsed >= MATRIX_INTRO_END - 0.2 {
+        if self.intro_time() >= MATRIX_INTRO_END - 0.2 {
             pass.set_pipeline(&pipelines.portrait);
             pass.set_bind_group(0, &portrait.bind_group, &[]);
             pass.draw(0..3, 0..1);
         }
 
-        if self.elapsed >= TIMELINE_START - 0.1
+        if self.intro_time() >= TIMELINE_START - 0.1
             && let Some(text_mesh) = self
                 .timeline_meshes
                 .get(self.current_slide)
@@ -1509,6 +1565,11 @@ fn build_timeline_mesh(slide: &TimelineSlide) -> RenderResult<TerminalMesh> {
         })
         .collect();
     Ok(mesh)
+}
+
+/// The timeline wraps around, so its last slide is one step from its first.
+fn is_within_one_slide(index: usize, current: usize, count: usize) -> bool {
+    index == current || (index + 1) % count == current || (current + 1) % count == index
 }
 
 fn terminal_character_color(slide: &TimelineSlide, character_order: usize) -> [f32; 4] {
@@ -1670,7 +1731,7 @@ fn create_text_pipeline(
         "timeline 3d text pipeline",
         layout,
         shader,
-        &[TerminalVertex::layout()],
+        &[Some(TerminalVertex::layout())],
     )
 }
 
@@ -1679,7 +1740,7 @@ fn create_geometry_pipeline(
     label: &'static str,
     layout: &wgpu::BindGroupLayout,
     shader: &wgpu::ShaderModule,
-    vertex_buffers: &[wgpu::VertexBufferLayout<'static>],
+    vertex_buffers: &[Option<wgpu::VertexBufferLayout<'static>>],
 ) -> wgpu::RenderPipeline {
     let pipeline_layout = context
         .device
@@ -1915,42 +1976,73 @@ fn terminal_overlay_layout(
     })
 }
 
-fn responsive_mobile_line_limit(viewport: glam::Vec2, scale_factor: f32) -> Option<usize> {
+/// The part of the viewport the terminal may fill, as fractions of its height
+/// measured from the top: below the page header and above the copyright line.
+#[derive(Clone, Copy, Debug)]
+struct LayoutBand {
+    top: f32,
+    bottom: f32,
+}
+
+/// `header_height` is in CSS pixels; `viewport` is in physical ones.
+fn layout_band(viewport: glam::Vec2, scale_factor: f32, header_height: f32) -> LayoutBand {
+    let scale_factor = scale_factor.max(1.0);
+    let margin = LAYOUT_SAFETY_MARGIN * scale_factor;
+    let top = header_height.max(0.0) * scale_factor + margin;
+    let bottom = copyright_overlay_layout(viewport, scale_factor)
+        .placement
+        .top
+        - margin;
+    let height = viewport.y.max(1.0);
+    LayoutBand {
+        top: (top / height).clamp(0.0, 1.0),
+        bottom: (bottom / height).clamp(0.0, 1.0),
+    }
+}
+
+fn context_layout_band(context: &RenderContext) -> LayoutBand {
+    layout_band(
+        glam::Vec2::new(
+            context.surface_config.width as f32,
+            context.surface_config.height as f32,
+        ),
+        context.window.scale_factor() as f32,
+        header_height(),
+    )
+}
+
+fn responsive_mobile_line_limit(
+    viewport: glam::Vec2,
+    scale_factor: f32,
+    header_height: f32,
+) -> Option<usize> {
     if viewport.x <= 0.0 || viewport.y <= 0.0 || !viewport.is_finite() {
         return None;
     }
-    let scale_factor = scale_factor.max(1.0);
-    let logical_viewport = viewport / scale_factor;
     let aspect = viewport.x / viewport.y;
     if !uses_mobile_timeline(aspect) {
         return None;
     }
 
-    let header_height = if logical_viewport.x <= 620.0 {
-        100.0
-    } else if logical_viewport.x <= 980.0 {
-        104.0
-    } else {
-        88.0
-    } * scale_factor;
-    let safety_margin = 4.0 * scale_factor;
-    let copyright_top = copyright_overlay_layout(viewport, scale_factor)
-        .placement
-        .top
-        - safety_margin;
+    let band = layout_band(viewport, scale_factor, header_height);
     let (view_projection, camera_distance) = responsive_camera(aspect);
 
     for line_count in
         (timeline::MOBILE_MIN_TERMINAL_LINES..=timeline::MOBILE_MAX_TERMINAL_LINES).rev()
     {
-        let model = terminal_model(aspect, camera_distance, 1.0, line_count);
-        let Some(layout) =
-            terminal_overlay_layout(viewport, view_projection, model, line_count, 27, 1.0)
-        else {
+        let model = terminal_model(aspect, camera_distance, 1.0, line_count, band);
+        let Some(layout) = terminal_overlay_layout(
+            viewport,
+            view_projection,
+            model,
+            line_count,
+            timeline::MOBILE_MAX_TERMINAL_COLUMNS,
+            1.0,
+        ) else {
             continue;
         };
         let bottom = layout.placement.top + layout.placement.height;
-        if layout.placement.top >= header_height + safety_margin && bottom <= copyright_top {
+        if layout.placement.top >= band.top * viewport.y && bottom <= band.bottom * viewport.y {
             return Some(line_count);
         }
     }
@@ -1979,6 +2071,7 @@ fn terminal_model(
     camera_distance: f32,
     slide_progress: f32,
     line_count: usize,
+    band: LayoutBand,
 ) -> glam::Mat4 {
     let mobile_scale = mobile_terminal_scale(aspect);
     let base_scale: f32 = if aspect >= 1.15 {
@@ -1995,7 +2088,10 @@ fn terminal_model(
     let plane_distance = (camera_distance - 1.05).max(0.1);
     let visible_height = 2.0 * plane_distance * (22.0_f32.to_radians()).tan();
     let content_height = line_count.max(1) as f32 * TERMINAL_LINE_HEIGHT;
-    let height_scale = base_scale.min(visible_height * 0.86 / content_height);
+    // The band's edges at the terminal's depth, in world units with +y up.
+    let band_top = visible_height * (0.5 - band.top);
+    let band_bottom = visible_height * (0.5 - band.bottom);
+    let height_scale = base_scale.min((band_top - band_bottom).max(f32::EPSILON) / content_height);
     let (target_x, text_scale) = if aspect >= 1.15 {
         desktop_terminal_placement(visible_height * aspect, height_scale)
     } else if aspect >= MOBILE_TIMELINE_MAX_ASPECT {
@@ -2009,7 +2105,12 @@ fn terminal_model(
     let target_y = if uses_mobile_timeline(aspect) {
         MOBILE_TERMINAL_VERTICAL_OFFSET
     } else {
-        0.0
+        // Centred on the viewport, unless a short window would then slide the
+        // first line under the header or the last one into the copyright.
+        let half_height = content_height * text_scale * 0.5;
+        0.0_f32
+            .max(band_bottom + half_height)
+            .min(band_top - half_height)
     };
     let slide_offset = mix(-camera_distance * 1.45, 0.0, ease_out_cubic(slide_progress));
     glam::Mat4::from_translation(glam::Vec3::new(target_x + slide_offset, target_y, 1.05))
@@ -2211,7 +2312,17 @@ fn dispatch_timeline_event(
     eyebrow: &str,
     heading: &str,
     summary: &str,
+    entries: &[timeline::TimelineSlideEntry],
 ) {
+    // The canvas is opaque to a screen reader or a keyboard. The page renders
+    // these entries as real text and links beside it.
+    let entries = serde_json::to_string(entries).unwrap_or_else(|error| {
+        log_error(&format!(
+            "Could not describe timeline page {} for the page: {error}",
+            index + 1
+        ));
+        "[]".to_owned()
+    });
     let detail = js_sys::Object::new();
     for (key, value) in [
         ("index", wasm_bindgen::JsValue::from_f64(index as f64)),
@@ -2219,6 +2330,7 @@ fn dispatch_timeline_event(
         ("eyebrow", wasm_bindgen::JsValue::from_str(eyebrow)),
         ("heading", wasm_bindgen::JsValue::from_str(heading)),
         ("description", wasm_bindgen::JsValue::from_str(summary)),
+        ("entries", wasm_bindgen::JsValue::from_str(&entries)),
     ] {
         let _ = js_sys::Reflect::set(&detail, &wasm_bindgen::JsValue::from_str(key), &value);
     }
@@ -2232,6 +2344,7 @@ fn dispatch_timeline_event(
     _eyebrow: &str,
     _heading: &str,
     _summary: &str,
+    _entries: &[timeline::TimelineSlideEntry],
 ) {
 }
 
@@ -2244,16 +2357,6 @@ fn dispatch_custom_event(name: &str, detail: &wasm_bindgen::JsValue) {
     {
         let _ = window.dispatch_event(&event);
     }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn log_message(message: &str) {
-    web_sys::console::info_1(&wasm_bindgen::JsValue::from_str(message));
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn log_message(message: &str) {
-    eprintln!("{message}");
 }
 
 /// Reports a failure the renderer recovered from. The scene keeps running, so
@@ -2271,16 +2374,27 @@ fn log_error(message: &str) {
 /// Starts the native renderer. The browser entry point is `wasm_start` below.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run_portfolio() -> RenderResult<()> {
-    let pending = Rc::new(RefCell::new(Some(
-        portrait::load_default_portrait().map_err(|error| error.to_string()),
-    )));
-    sib::render::run(Portfolio::new(pending))
+    sib::render::run(Portfolio::new())
 }
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn set_reduced_motion(reduced: bool) {
     REDUCED_MOTION.store(reduced, Ordering::Relaxed);
+}
+
+/// Reports the page header's height in CSS pixels. The header covers the top
+/// of the canvas, so the terminal is laid out below it.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn set_header_height(css_pixels: f32) {
+    if !css_pixels.is_finite() {
+        return;
+    }
+    let height = css_pixels.max(0.0).to_bits();
+    if HEADER_HEIGHT.swap(height, Ordering::Relaxed) != height {
+        LAYOUT_DIRTY.store(true, Ordering::Relaxed);
+    }
 }
 
 /// Queues the primary terminal action for the next animation frame.
@@ -2329,21 +2443,26 @@ pub fn activate_timeline_link(x_physical: f32, y_physical: f32) -> bool {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen::prelude::wasm_bindgen(start)]
 pub fn wasm_start() -> Result<(), wasm_bindgen::JsValue> {
-    let pending: PendingPortrait = Rc::new(RefCell::new(None));
-    let loader_slot = pending.clone();
-    wasm_bindgen_futures::spawn_local(async move {
-        let result = portrait::load_default_portrait()
-            .await
-            .map_err(|error| error.to_string());
-        *loader_slot.borrow_mut() = Some(result);
-    });
-    sib::render::run(Portfolio::new(pending))
+    sib::render::run(Portfolio::new())
         .map_err(|error| wasm_bindgen::JsValue::from_str(&error.to_string()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `--header-height` in assets/css/site.css for a viewport in CSS pixels.
+    fn css_header_height(viewport: glam::Vec2) -> f32 {
+        if viewport.x <= 620.0 {
+            100.0
+        } else if viewport.y <= 690.0 {
+            72.0
+        } else if viewport.x <= 980.0 {
+            104.0
+        } else {
+            88.0
+        }
+    }
 
     #[test]
     fn reduced_motion_api_state_is_atomic() {
@@ -2375,22 +2494,84 @@ mod tests {
 
         for _ in 0..32 {
             let scheduled_start = schedule.next_start;
-            let interval = scheduled_start - previous_start;
+            let interval = (scheduled_start - previous_start) as f32;
             assert!(interval >= MATRIX_SIGNAL_MIN_INTERVAL - 0.001);
             assert!(interval <= MATRIX_SIGNAL_MAX_INTERVAL + 0.001);
 
             schedule.update(scheduled_start);
-            let active = schedule.uniforms(scheduled_start, true);
-            assert_eq!(active[0], scheduled_start);
+            let started = scene_time(scheduled_start);
+            let active = schedule.uniforms(scheduled_start, started, true);
+            assert_eq!(active[0], started);
             assert!((0.06..=0.94).contains(&active[2]));
             assert_eq!(active[3], 1.0);
-            assert_eq!(schedule.uniforms(scheduled_start, false)[3], 0.0);
+            assert_eq!(schedule.uniforms(scheduled_start, started, false)[3], 0.0);
+            let finished = scheduled_start + f64::from(MATRIX_SIGNAL_DURATION) + 0.01;
             assert_eq!(
-                schedule.uniforms(scheduled_start + MATRIX_SIGNAL_DURATION + 0.01, true)[3],
+                schedule.uniforms(finished, scene_time(finished), true)[3],
                 0.0
             );
             previous_start = scheduled_start;
         }
+    }
+
+    #[test]
+    fn scene_clock_still_resolves_frames_after_a_week() {
+        let week = 7.0 * 86_400.0_f64;
+        let frame = 1.0 / 60.0_f64;
+        // The f32 clock this replaces could no longer advance by one frame.
+        assert_eq!(week as f32 + frame as f32, week as f32);
+        let step = f64::from(scene_time(week + frame) - scene_time(week));
+        assert!((step - frame).abs() < 1.0e-3, "a frame advanced {step}s");
+
+        // A signal that starts just before the shader clock wraps keeps its
+        // age: the shader computes it as `time - start`.
+        let mut schedule = MatrixSignalSchedule::with_seed(0x1234_5678);
+        let start = SCENE_TIME_PERIOD - 2.0;
+        schedule.update(start);
+        let now = start + 5.0;
+        let signal = schedule.uniforms(now, scene_time(now), true);
+        assert!(scene_time(now) < scene_time(start));
+        assert!((scene_time(now) - signal[0] - 5.0).abs() < 1.0e-3);
+        assert_eq!(signal[3], 1.0);
+    }
+
+    #[test]
+    fn one_wheel_gesture_turns_one_page() {
+        // A trackpad swipe arrives as dozens of small deltas, inertia included.
+        let mut wheel = WheelGesture::default();
+        let turns = (0..90)
+            .filter_map(|_| {
+                wheel.tick(1.0 / 60.0);
+                wheel.scroll(-14.0)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(turns, [1]);
+
+        // Once the wheel has been quiet, the next notch is a new gesture.
+        wheel.tick(WHEEL_GESTURE_GAP);
+        assert_eq!(wheel.scroll(100.0), Some(-1));
+        assert_eq!(wheel.scroll(100.0), None);
+        wheel.tick(WHEEL_GESTURE_GAP);
+        assert_eq!(wheel.scroll(-WHEEL_LINE_PIXELS), Some(1));
+
+        // Travel below the threshold is forgotten with its gesture.
+        wheel.tick(WHEEL_GESTURE_GAP);
+        assert_eq!(wheel.scroll(-WHEEL_TURN_PIXELS * 0.6), None);
+        wheel.tick(WHEEL_GESTURE_GAP);
+        assert_eq!(wheel.scroll(-WHEEL_TURN_PIXELS * 0.6), None);
+    }
+
+    #[test]
+    fn only_the_current_slide_and_its_neighbours_keep_a_mesh() {
+        let kept = |current| {
+            (0..28)
+                .filter(|&index| is_within_one_slide(index, current, 28))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(kept(10), [9, 10, 11]);
+        assert_eq!(kept(0), [0, 1, 27]);
+        assert_eq!(kept(27), [0, 26, 27]);
+        assert!(is_within_one_slide(0, 0, 1));
     }
 
     #[test]
@@ -2431,7 +2612,8 @@ mod tests {
         let viewport = glam::Vec2::new(1440.0, 900.0);
         let aspect = viewport.x / viewport.y;
         let (view_projection, camera_distance) = responsive_camera(aspect);
-        let model = terminal_model(aspect, camera_distance, 1.0, 20);
+        let band = layout_band(viewport, 1.0, css_header_height(viewport));
+        let model = terminal_model(aspect, camera_distance, 1.0, 20, band);
         let layout = terminal_overlay_layout(
             viewport,
             view_projection,
@@ -2603,7 +2785,8 @@ mod tests {
         let aspect = 16.0 / 9.0;
         let viewport = glam::Vec2::new(1280.0, 720.0);
         let (view_projection, camera_distance) = responsive_camera(aspect);
-        let model = terminal_model(aspect, camera_distance, 1.0, 24);
+        let band = layout_band(viewport, 1.0, css_header_height(viewport));
+        let model = terminal_model(aspect, camera_distance, 1.0, 24, band);
         let expected_local = glam::Vec2::new(0.35, -0.20);
         let clip =
             view_projection * model * glam::Vec4::new(expected_local.x, expected_local.y, 0.0, 1.0);
@@ -2643,22 +2826,41 @@ mod tests {
         assert!((full_height_mobile_scale - MOBILE_TERMINAL_BASE_SCALE).abs() < f32::EPSILON);
         assert!(browser_view_mobile_scale >= full_height_mobile_scale * 1.04);
         assert!(browser_view_mobile_scale <= MOBILE_TERMINAL_BOOSTED_SCALE);
+        let stylesheet = include_str!("../assets/css/site.css");
+        for header_height in ["88px", "104px", "100px", "72px"] {
+            assert!(
+                stylesheet.contains(&format!("--header-height: {header_height};")),
+                "css_header_height no longer mirrors site.css"
+            );
+        }
+        // The header's height arrives in CSS pixels whatever the display's scale.
+        let line_limit = |width: f32, height: f32, scale_factor: f32| {
+            let viewport = glam::Vec2::new(width, height);
+            responsive_mobile_line_limit(
+                viewport,
+                scale_factor,
+                css_header_height(viewport / scale_factor),
+            )
+        };
         assert_eq!(
-            responsive_mobile_line_limit(glam::Vec2::new(390.0, 844.0), 1.0),
+            line_limit(390.0, 844.0, 1.0),
             Some(timeline::MOBILE_MAX_TERMINAL_LINES)
         );
         assert_eq!(
-            responsive_mobile_line_limit(glam::Vec2::new(780.0, 1688.0), 2.0),
-            responsive_mobile_line_limit(glam::Vec2::new(390.0, 844.0), 1.0)
+            line_limit(780.0, 1688.0, 2.0),
+            line_limit(390.0, 844.0, 1.0)
         );
         assert!(
-            responsive_mobile_line_limit(glam::Vec2::new(320.0, 493.0), 1.0)
+            line_limit(320.0, 493.0, 1.0)
                 .is_some_and(|lines| lines < timeline::MOBILE_MAX_TERMINAL_LINES)
         );
-        assert!(responsive_mobile_line_limit(glam::Vec2::new(768.0, 1024.0), 1.0).is_some());
-        assert_eq!(
-            responsive_mobile_line_limit(glam::Vec2::new(801.0, 1000.0), 1.0),
-            None
+        assert!(line_limit(768.0, 1024.0, 1.0).is_some());
+        assert_eq!(line_limit(801.0, 1000.0, 1.0), None);
+        // A taller header, such as one padded for a display notch, leaves
+        // room for fewer lines.
+        assert!(
+            responsive_mobile_line_limit(glam::Vec2::new(390.0, 844.0), 1.0, 260.0)
+                < line_limit(390.0, 844.0, 1.0)
         );
 
         let options = text_mesh::TextMeshOptions {
@@ -2696,9 +2898,17 @@ mod tests {
             glam::Vec2::new(1440.0, 900.0),
             glam::Vec2::new(1920.0, 1080.0),
             glam::Vec2::new(2560.0, 1080.0),
+            // Short windows, where a centred terminal once ran under the
+            // header: a laptop with browser chrome, and a phone on its side.
+            glam::Vec2::new(1440.0, 720.0),
+            glam::Vec2::new(1366.0, 650.0),
+            glam::Vec2::new(844.0, 390.0),
         ] {
             let aspect = viewport.x / viewport.y;
-            let mobile_line_limit = responsive_mobile_line_limit(viewport, 1.0);
+            let header_height = css_header_height(viewport);
+            let band = layout_band(viewport, 1.0, header_height);
+            let copyright_top = copyright_overlay_layout(viewport, 1.0).placement.top;
+            let mobile_line_limit = responsive_mobile_line_limit(viewport, 1.0, header_height);
             let slides = if let Some(max_lines) = mobile_line_limit {
                 timeline::load_mobile_slides(max_lines).unwrap()
             } else {
@@ -2709,7 +2919,7 @@ mod tests {
                     assert!(slide.line_count() <= max_lines);
                 }
                 let (view_projection, camera_distance) = responsive_camera(aspect);
-                let model = terminal_model(aspect, camera_distance, 1.0, slide.line_count());
+                let model = terminal_model(aspect, camera_distance, 1.0, slide.line_count(), band);
                 let max_columns = slide
                     .terminal
                     .lines()
@@ -2745,6 +2955,27 @@ mod tests {
                     "{} lines exceed the {viewport:?} viewport: NDC {min_ndc:?}..{max_ndc:?}",
                     slide.line_count()
                 );
+
+                // The lines themselves, without the allowance for overhang
+                // above, stay between the page header and the copyright.
+                let half_height = slide.line_count() as f32 * TERMINAL_LINE_HEIGHT * 0.5;
+                let screen_y = |local_y: f32| {
+                    let clip = view_projection * model * glam::Vec4::new(0.0, local_y, 0.0, 1.0);
+                    (1.0 - clip.y / clip.w) * viewport.y * 0.5
+                };
+                assert!(
+                    screen_y(half_height) >= header_height,
+                    "{} lines start under the {header_height}px header at {viewport:?}: {:.1}px",
+                    slide.line_count(),
+                    screen_y(half_height)
+                );
+                assert!(
+                    screen_y(-half_height) <= copyright_top,
+                    "{} lines run into the copyright at {viewport:?}: {:.1}px > {copyright_top:.1}px",
+                    slide.line_count(),
+                    screen_y(-half_height)
+                );
+
                 if aspect >= 1.15 {
                     assert!(
                         min_ndc.x >= DESKTOP_TERMINAL_LEFT * 2.0 - 1.0 - 0.01,
@@ -2775,7 +3006,6 @@ mod tests {
 
                     let terminal_top = (1.0 - max_ndc.y) * viewport.y * 0.5;
                     let terminal_bottom = (1.0 - min_ndc.y) * viewport.y * 0.5;
-                    let copyright_top = copyright_overlay_layout(viewport, 1.0).placement.top;
                     assert!(
                         terminal_top >= 100.0,
                         "mobile terminal begins behind the fixed header at {viewport:?}: {terminal_top:.1}px"
@@ -2787,6 +3017,49 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn desktop_terminal_is_lowered_only_as_far_as_the_header_requires() {
+        let line_count = timeline::load_slides()
+            .unwrap()
+            .iter()
+            .map(TimelineSlide::line_count)
+            .max()
+            .unwrap();
+        // The terminal's vertical offset, and where its first line starts.
+        let placed = |viewport: glam::Vec2, header_height: f32| {
+            let aspect = viewport.x / viewport.y;
+            let (view_projection, camera_distance) = responsive_camera(aspect);
+            let band = layout_band(viewport, 1.0, header_height);
+            let model = terminal_model(aspect, camera_distance, 1.0, line_count, band);
+            let top = project_terminal_point(
+                glam::Vec2::new(0.0, line_count as f32 * TERMINAL_LINE_HEIGHT * 0.5),
+                viewport,
+                view_projection,
+                model,
+            )
+            .unwrap();
+            (model.w_axis.y, top.y)
+        };
+
+        // A tall window keeps the terminal centred, as it was tuned.
+        let (offset, top) = placed(glam::Vec2::new(1920.0, 1080.0), 88.0);
+        assert_eq!(offset, 0.0);
+        assert!(top >= 88.0);
+
+        // A short one would centre the first line under the header, so the
+        // terminal moves down until that line clears it.
+        let (offset, top) = placed(glam::Vec2::new(1440.0, 720.0), 88.0);
+        assert!(offset < 0.0);
+        assert!(
+            (top - (88.0 + LAYOUT_SAFETY_MARGIN)).abs() < 0.5,
+            "the first line starts at {top:.1}px"
+        );
+
+        // The same window with a slimmer header needs no adjustment.
+        let (offset, _) = placed(glam::Vec2::new(1440.0, 720.0), 40.0);
+        assert_eq!(offset, 0.0);
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -2805,6 +3078,7 @@ mod tests {
                 power_preference: wgpu::PowerPreference::LowPower,
                 compatible_surface: None,
                 force_fallback_adapter: false,
+                ..Default::default()
             })) {
                 Ok(adapter) => adapter,
                 Err(error) => {
@@ -2944,14 +3218,15 @@ mod tests {
             .expect("matrix GPU smoke map callback should run")
             .expect("matrix GPU smoke readback should map");
 
-        let bytes = slice.get_mapped_range();
+        let bytes = slice
+            .get_mapped_range()
+            .expect("matrix GPU smoke readback should be readable");
         let mut non_black = 0_usize;
         let mut green_dominant = 0_usize;
         let mut bright_green = 0_usize;
         let mut max_green = 0_u8;
         let mut luminance_sum = 0.0_f64;
-        for pixel in bytes.chunks_exact(BYTES_PER_PIXEL as usize) {
-            let [red, green, blue, _alpha] = [pixel[0], pixel[1], pixel[2], pixel[3]];
+        for &[red, green, blue, _alpha] in bytes.as_chunks::<4>().0 {
             non_black += usize::from(red > 2 || green > 2 || blue > 2);
             green_dominant += usize::from(green > red && green > blue);
             bright_green += usize::from(green >= 16 && green > red && green > blue);

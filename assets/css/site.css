@@ -405,6 +405,11 @@ body[data-render-state="ready"] .scene-grid {
   font-size: 0.55rem;
 }
 
+.unsupported-panel > p:last-child {
+  min-height: 0;
+  margin-bottom: 0;
+}
+
 .unsupported-panel,
 .error-panel {
   border-color: rgba(255, 176, 129, 0.38);
@@ -435,7 +440,26 @@ body[data-render-state="ready"] .scene-grid {
   cursor: pointer;
 }
 
-.timeline-transcript {
+/* Real links for the slide on the canvas. A screen reader always finds them;
+   they come into view when the keyboard focuses one. */
+.timeline-links {
+  position: absolute;
+  z-index: 4;
+  bottom: 4rem;
+  left: var(--page-gutter);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  max-width: calc(100% - 2 * var(--page-gutter));
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--line-strong);
+  color: var(--matrix-bright);
+  background: var(--panel);
+  font: 600 0.72rem/1.4 var(--mono);
+}
+
+.timeline-transcript,
+.timeline-links:not(:focus-within) {
   position: absolute !important;
   width: 1px !important;
   height: 1px !important;

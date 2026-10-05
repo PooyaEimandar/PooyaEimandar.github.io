@@ -8,7 +8,7 @@ and the [`sib::render`](https://github.com/PooyaEimandar/sib) module.
 Requirements:
 
 - Rust with the `wasm32-unknown-unknown` target
-- `wasm-bindgen-cli` 0.2.126
+- `wasm-bindgen-cli` 0.2.129
 - Node.js 22.18 or newer and npm
 
 ```sh
