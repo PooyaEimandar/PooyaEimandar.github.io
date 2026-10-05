@@ -1,17 +1,19 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 const TIMELINE_JSON: &str = include_str!("../data/timeline.json");
-// Phone transcripts use fewer columns so the responsive transform can enlarge
-// every WebGPU glyph without cropping the canonical timeline content.
 const MAX_ENTRIES_PER_SLIDE: usize = 2;
 const MAX_TERMINAL_LINES: usize = 22;
+// A slide that continues an entry never opens with fewer lines than this.
+const MIN_CONTINUED_LINES: usize = 3;
 const INITIAL_TYPE_DELAY: f32 = 0.28;
 const CHARACTER_SECONDS: f32 = 0.0115;
 const SPACE_SECONDS: f32 = 0.006;
 const PUNCTUATION_SECONDS: f32 = 0.021;
 const LINE_PAUSE_SECONDS: f32 = 0.100;
 pub const MAX_TERMINAL_COLUMNS: usize = 42;
-const MOBILE_MAX_TERMINAL_COLUMNS: usize = 27;
+// Phone transcripts use fewer columns so the responsive transform can enlarge
+// every WebGPU glyph without cropping the canonical timeline content.
+pub const MOBILE_MAX_TERMINAL_COLUMNS: usize = 27;
 pub const MOBILE_MAX_TERMINAL_LINES: usize = 19;
 pub const MOBILE_MIN_TERMINAL_LINES: usize = 14;
 const MOBILE_FOOTER_LINES: usize = 3;
@@ -60,6 +62,23 @@ pub struct TimelineLinkRange {
     pub end_character: usize,
 }
 
+/// What a slide shows, as text and real links, for assistive technology.
+#[derive(Clone, Debug, Serialize)]
+pub struct TimelineSlideEntry {
+    pub year: String,
+    pub title: String,
+    /// Empty on the slides that continue an entry: its first slide already
+    /// carries the whole text, and a screen reader should not repeat it.
+    pub text: String,
+    pub links: Vec<TimelineSlideLink>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct TimelineSlideLink {
+    pub label: String,
+    pub url: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct TimelineSlide {
     pub eyebrow: String,
@@ -67,6 +86,7 @@ pub struct TimelineSlide {
     pub summary: String,
     pub terminal: String,
     pub links: Vec<TimelineLinkRange>,
+    pub entries: Vec<TimelineSlideEntry>,
     entry_ids: Vec<String>,
     source_line_start: usize,
     line_count: usize,
@@ -151,6 +171,7 @@ pub fn load_slides() -> Result<Vec<TimelineSlide>, String> {
                 reveal_times: typing_schedule(&terminal.text),
                 links: terminal.links,
                 terminal: terminal.text,
+                entries: slide_entries(&entries, draft.continuation),
                 entry_ids: entries.iter().map(|entry| entry.id.clone()).collect(),
                 source_line_start: draft.source_line_start,
                 line_count,
@@ -168,6 +189,29 @@ pub fn load_slides() -> Result<Vec<TimelineSlide>, String> {
     Ok(slides)
 }
 
+fn slide_entries(entries: &[&TimelineEntry], continuation: usize) -> Vec<TimelineSlideEntry> {
+    entries
+        .iter()
+        .map(|entry| TimelineSlideEntry {
+            year: entry.year.clone(),
+            title: entry.title.clone(),
+            text: if continuation == 0 {
+                entry.text.clone()
+            } else {
+                String::new()
+            },
+            links: entry
+                .links
+                .iter()
+                .map(|link| TimelineSlideLink {
+                    label: link.label.clone(),
+                    url: link.url.clone(),
+                })
+                .collect(),
+        })
+        .collect()
+}
+
 pub fn load_mobile_slides(max_terminal_lines: usize) -> Result<Vec<TimelineSlide>, String> {
     if !(MOBILE_MIN_TERMINAL_LINES..=MOBILE_MAX_TERMINAL_LINES).contains(&max_terminal_lines) {
         return Err(format!(
@@ -176,34 +220,15 @@ pub fn load_mobile_slides(max_terminal_lines: usize) -> Result<Vec<TimelineSlide
     }
     let document: TimelineDocument = serde_json::from_str(TIMELINE_JSON)
         .map_err(|error| format!("invalid data/timeline.json: {error}"))?;
-    let mut drafts = Vec::new();
 
-    for (section_index, section) in document.sections.iter().enumerate() {
-        let header_lines = mobile_header_line_count(section);
-        let first_page_capacity = max_terminal_lines
-            .checked_sub(header_lines + MOBILE_FOOTER_LINES)
-            .filter(|capacity| *capacity > 0)
-            .ok_or_else(|| format!("mobile terminal header is too tall for {}", section.id))?;
-        let continued_page_capacity = first_page_capacity
-            .checked_sub(1)
-            .filter(|capacity| *capacity > 0)
-            .ok_or_else(|| {
-                format!(
-                    "mobile terminal continuation is too tall for {}",
-                    section.id
-                )
-            })?;
-
-        for (entry_index, entry) in section.entries.iter().enumerate() {
-            push_entry_chunks(
-                &mut drafts,
-                section_index,
-                entry_index,
-                &build_mobile_entry_lines(entry),
-                first_page_capacity,
-                continued_page_capacity,
-            );
-        }
+    // The header's `01/59` counter widens to `001/108` once a layout reaches
+    // 100 slides, which narrows the title beside it. Paginate again with the
+    // wider counter when that happens, so the header budget stays exact.
+    let mut counter_digits = mobile_counter_digits(0);
+    let mut drafts = paginate_mobile(&document, max_terminal_lines, counter_digits)?;
+    while mobile_counter_digits(drafts.len()) > counter_digits {
+        counter_digits = mobile_counter_digits(drafts.len());
+        drafts = paginate_mobile(&document, max_terminal_lines, counter_digits)?;
     }
 
     if drafts.is_empty() {
@@ -226,7 +251,8 @@ pub fn load_mobile_slides(max_terminal_lines: usize) -> Result<Vec<TimelineSlide
             .iter()
             .filter_map(|&entry_index| section.entries.get(entry_index))
             .collect::<Vec<_>>();
-        let terminal = build_mobile_terminal_stream(section, &draft, slide_index, slide_count);
+        let terminal =
+            build_mobile_terminal_stream(section, &draft, slide_index, slide_count, counter_digits);
         let line_count = terminal.text.lines().count();
         slides.push(TimelineSlide {
             eyebrow: format!(
@@ -240,6 +266,7 @@ pub fn load_mobile_slides(max_terminal_lines: usize) -> Result<Vec<TimelineSlide
             reveal_times: typing_schedule(&terminal.text),
             links: terminal.links,
             terminal: terminal.text,
+            entries: slide_entries(&entries, draft.continuation),
             entry_ids: entries.iter().map(|entry| entry.id.clone()).collect(),
             source_line_start: draft.source_line_start,
             line_count,
@@ -318,7 +345,7 @@ fn push_entry_chunks(
         } else {
             continued_page_capacity
         };
-        let line_end = (line_start + capacity).min(entry_lines.len());
+        let line_end = chunk_end(entry_lines, line_start, capacity, continued_page_capacity);
         let mut lines = Vec::with_capacity(line_end - line_start + usize::from(continuation > 0));
         if continuation > 0 {
             lines.push(TerminalLine::plain("| # continued"));
@@ -336,13 +363,110 @@ fn push_entry_chunks(
     }
 }
 
-fn mobile_header_line_count(section: &TimelineSection) -> usize {
-    const HEADING_PREFIX_COLUMNS: usize = 13; // `| > 00/00 :: `
+/// Picks where a slide stops within an entry that needs more than one. Slides
+/// fill in order, but each leaves enough for the slides after it: three lines
+/// apiece, and for the last one the entry's links under a line of its text.
+/// That costs no extra slide, and no slide is a stub or a list of bare links.
+fn chunk_end(
+    entry_lines: &[TerminalLine],
+    line_start: usize,
+    capacity: usize,
+    next_capacity: usize,
+) -> usize {
+    let total = entry_lines.len();
+    let remaining = total - line_start;
+    if remaining <= capacity {
+        return total;
+    }
+
+    let link_lines = entry_lines
+        .iter()
+        .rev()
+        .take_while(|line| is_link_line(line))
+        .count();
+    let last_slide = (link_lines + 1).max(MIN_CONTINUED_LINES).min(next_capacity);
+    let later_slides = (remaining - capacity).div_ceil(next_capacity.max(1));
+    let reserved = (later_slides - 1) * MIN_CONTINUED_LINES + last_slide;
+    let line_end = line_start + capacity.min(remaining.saturating_sub(reserved)).max(1);
+
+    // Keep the lines of one wrapped link label together when a slide can.
+    (line_start + 1..=line_end)
+        .rev()
+        .find(|&end| !continues_link_label(&entry_lines[end - 1], &entry_lines[end]))
+        .unwrap_or(line_end)
+}
+
+fn is_link_line(line: &TerminalLine) -> bool {
+    !line.links.is_empty()
+}
+
+/// Mobile wraps a long label over consecutive lines that share one URL.
+fn continues_link_label(previous: &TerminalLine, line: &TerminalLine) -> bool {
+    matches!(
+        (previous.links.as_slice(), line.links.as_slice()),
+        ([previous], [line]) if previous.url == line.url
+    )
+}
+
+/// Width of the zero-padded numbers in the mobile header's slide counter.
+fn mobile_counter_digits(slide_count: usize) -> usize {
+    slide_count.to_string().len().max(2)
+}
+
+fn mobile_heading_prefix(slide_index: usize, slide_count: usize, counter_digits: usize) -> String {
+    format!(
+        "| > {:0width$}/{:0width$} :: ",
+        slide_index + 1,
+        slide_count,
+        width = counter_digits
+    )
+}
+
+fn mobile_header_line_count(section: &TimelineSection, counter_digits: usize) -> usize {
+    // Every counter in a layout is padded to the same width, so any slide's
+    // prefix measures them all.
+    let prefix_columns = mobile_heading_prefix(0, 0, counter_digits).chars().count();
     4 + wrap_terminal_words(
         &terminal_ascii(&section.title),
-        MOBILE_MAX_TERMINAL_COLUMNS - HEADING_PREFIX_COLUMNS,
+        MOBILE_MAX_TERMINAL_COLUMNS.saturating_sub(prefix_columns),
     )
     .len()
+}
+
+fn paginate_mobile(
+    document: &TimelineDocument,
+    max_terminal_lines: usize,
+    counter_digits: usize,
+) -> Result<Vec<SlideDraft>, String> {
+    let mut drafts = Vec::new();
+    for (section_index, section) in document.sections.iter().enumerate() {
+        let header_lines = mobile_header_line_count(section, counter_digits);
+        let first_page_capacity = max_terminal_lines
+            .checked_sub(header_lines + MOBILE_FOOTER_LINES)
+            .filter(|capacity| *capacity > 0)
+            .ok_or_else(|| format!("mobile terminal header is too tall for {}", section.id))?;
+        let continued_page_capacity = first_page_capacity
+            .checked_sub(1)
+            .filter(|capacity| *capacity > 0)
+            .ok_or_else(|| {
+                format!(
+                    "mobile terminal continuation is too tall for {}",
+                    section.id
+                )
+            })?;
+
+        for (entry_index, entry) in section.entries.iter().enumerate() {
+            push_entry_chunks(
+                &mut drafts,
+                section_index,
+                entry_index,
+                &build_mobile_entry_lines(entry),
+                first_page_capacity,
+                continued_page_capacity,
+            );
+        }
+    }
+    Ok(drafts)
 }
 
 /// `| $ 2026 :: AINU` opens a milestone. A wrapped title continues aligned
@@ -386,12 +510,13 @@ fn build_mobile_terminal_stream(
     draft: &SlideDraft,
     slide_index: usize,
     slide_count: usize,
+    counter_digits: usize,
 ) -> TerminalBuild {
     let mut lines = vec![
         TerminalLine::plain("| $ pooya.timeline"),
         TerminalLine::plain(format!("| # {}", terminal_ascii(&section.id))),
     ];
-    let heading_prefix = format!("| > {:02}/{:02} :: ", slide_index + 1, slide_count);
+    let heading_prefix = mobile_heading_prefix(slide_index, slide_count, counter_digits);
     append_wrapped_body_with_columns(
         &mut lines,
         &heading_prefix,
@@ -927,6 +1052,150 @@ mod tests {
     }
 
     #[test]
+    fn a_split_entry_leaves_enough_for_its_later_slides() {
+        let text = |index: usize| TerminalLine::plain(format!("|   line {index}"));
+        let label_line = || TerminalLine {
+            text: "@ [label]".to_owned(),
+            links: vec![LineLinkRange {
+                url: "https://pooya.ai/".to_owned(),
+                start_column: 2,
+                end_column: 9,
+            }],
+        };
+        // Body lines per slide, without the `| # continued` marker.
+        let slide_sizes = |entry_lines: &[TerminalLine]| {
+            let mut drafts = Vec::new();
+            push_entry_chunks(&mut drafts, 0, 0, entry_lines, 5, 4);
+            drafts
+                .iter()
+                .map(|draft| draft.lines.len() - usize::from(draft.continuation > 0))
+                .collect::<Vec<_>>()
+        };
+
+        // Slides fill in order while the last one still gets three lines.
+        assert_eq!(
+            slide_sizes(&(0..13).map(text).collect::<Vec<_>>()),
+            [5, 4, 4]
+        );
+        // One line too many for a slide is shared, not left on its own.
+        assert_eq!(slide_sizes(&(0..6).map(text).collect::<Vec<_>>()), [3, 3]);
+        // Filling every slide would strand half of the wrapped label: 5, 4, 4
+        // and one line. Earlier slides give up a line each instead.
+        let mut entry_lines = (0..12).map(text).collect::<Vec<_>>();
+        entry_lines.extend([label_line(), label_line()]);
+        assert_eq!(slide_sizes(&entry_lines), [5, 3, 3, 3]);
+    }
+
+    #[test]
+    fn continued_slides_carry_text_and_whole_link_labels_at_every_phone_size() {
+        let document: TimelineDocument = serde_json::from_str(TIMELINE_JSON).unwrap();
+        for limit in MOBILE_MIN_TERMINAL_LINES..=MOBILE_MAX_TERMINAL_LINES {
+            let slides = load_mobile_slides(limit).unwrap();
+            let digits = mobile_counter_digits(slides.len());
+            for (index, slide) in slides.iter().enumerate() {
+                assert!(
+                    slide.line_count() <= limit,
+                    "{limit}-line layout: slide {} has {} lines",
+                    index + 1,
+                    slide.line_count()
+                );
+                let section = document
+                    .sections
+                    .iter()
+                    .find(|section| slide.heading.starts_with(&section.title))
+                    .expect("slide section");
+                let lines = slide.terminal.lines().collect::<Vec<_>>();
+                assert_eq!(
+                    mobile_header_line_count(section, digits),
+                    lines.iter().position(|line| *line == "|").unwrap() + 1,
+                    "{limit}-line layout: header budget is wrong on slide {}",
+                    index + 1
+                );
+                let header_lines = mobile_header_line_count(section, digits);
+                let body = &lines[header_lines..lines.len() - MOBILE_FOOTER_LINES];
+                let Some(continued) = body.strip_prefix(&["| # continued"]) else {
+                    continue;
+                };
+                assert!(
+                    continued.len() >= MIN_CONTINUED_LINES,
+                    "{limit}-line layout: slide {} continues {} with a stub: {continued:?}",
+                    index + 1,
+                    slide.primary_entry_id()
+                );
+                // Links follow a line of their entry's text, unless the links
+                // alone fill the slide.
+                let continued_capacity = limit - header_lines - MOBILE_FOOTER_LINES - 1;
+                assert!(
+                    continued.len() == continued_capacity
+                        || !continued.iter().all(|line| line.starts_with("@ [")),
+                    "{limit}-line layout: slide {} is only links: {continued:?}",
+                    index + 1
+                );
+            }
+
+            // A wrapped label's lines share one URL; they must share a slide.
+            for pair in slides.windows(2) {
+                let (Some(last), Some(first)) = (pair[0].links.last(), pair[1].links.first())
+                else {
+                    continue;
+                };
+                let ends_slide = last.line + MOBILE_FOOTER_LINES + 1 == pair[0].line_count();
+                let opens_slide = pair[1]
+                    .terminal
+                    .lines()
+                    .nth(first.line - 1)
+                    .is_some_and(|line| line == "| # continued");
+                assert!(
+                    !(ends_slide && opens_slide && last.url == first.url),
+                    "{limit}-line layout: a link label is split across slides: {}",
+                    last.url
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn mobile_header_budget_follows_the_counter_width() {
+        let section = |title: &str| TimelineSection {
+            id: "awards".to_owned(),
+            title: title.to_owned(),
+            range: "2026".to_owned(),
+            entries: Vec::new(),
+        };
+        let draft = SlideDraft {
+            section_index: 0,
+            entry_indices: Vec::new(),
+            continuation: 0,
+            source_line_start: 0,
+            lines: Vec::new(),
+        };
+        assert_eq!(mobile_counter_digits(59), 2);
+        assert_eq!(mobile_counter_digits(108), 3);
+        // Fourteen characters fit beside `01/59` but not beside `001/108`.
+        for title in ["Origins", "Awards & talks", "Leadership & experiments"] {
+            for (slide_count, digits) in [(59, 2), (108, 3), (1_000, 4)] {
+                let built = build_mobile_terminal_stream(
+                    &section(title),
+                    &draft,
+                    slide_count - 1,
+                    slide_count,
+                    digits,
+                );
+                let header_lines = built.text.lines().position(|line| line == "|").unwrap() + 1;
+                assert_eq!(
+                    mobile_header_line_count(&section(title), digits),
+                    header_lines,
+                    "{title} beside a {digits}-digit counter"
+                );
+            }
+        }
+        assert_ne!(
+            mobile_header_line_count(&section("Awards & talks"), 2),
+            mobile_header_line_count(&section("Awards & talks"), 3)
+        );
+    }
+
+    #[test]
     fn mobile_timeline_reflows_every_entry_without_clipping_or_omission() {
         let document: TimelineDocument = serde_json::from_str(TIMELINE_JSON).unwrap();
         let slides = load_mobile_slides(MOBILE_MAX_TERMINAL_LINES).unwrap();
@@ -986,7 +1255,8 @@ mod tests {
                     .filter(|slide| slide.contains_entry(&entry.id))
                 {
                     let terminal_lines = slide.terminal.lines().collect::<Vec<_>>();
-                    let content_start = mobile_header_line_count(section);
+                    let content_start =
+                        mobile_header_line_count(section, mobile_counter_digits(slides.len()));
                     let content_end = terminal_lines.len() - MOBILE_FOOTER_LINES;
                     let mut content = &terminal_lines[content_start..content_end];
                     if content.first() == Some(&"| # continued") {

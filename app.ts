@@ -1,23 +1,15 @@
 type LoadStage = "matrix" | "face" | "timeline";
 
-interface TimelineEntry {
-  id: string;
+interface SlideLink {
+  label: string;
+  url: string;
+}
+
+interface SlideEntry {
   year: string;
   title: string;
-}
-
-interface TimelineSection {
-  range: string;
-  entries: TimelineEntry[];
-}
-
-interface TimelineData {
-  sections: TimelineSection[];
-}
-
-interface TimelineSlide {
-  range: string;
-  description: string;
+  text: string;
+  links: SlideLink[];
 }
 
 interface WasmBindings {
@@ -25,12 +17,9 @@ interface WasmBindings {
     module_or_path: RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
   }) => Promise<unknown>;
   set_reduced_motion?: (reduced: boolean) => void;
+  set_header_height?: (cssPixels: number) => void;
   activate_timeline_link?: (x: number, y: number) => boolean;
   reveal_or_advance_timeline?: () => boolean;
-}
-
-interface RendererReadyDetail {
-  slideCount?: number;
 }
 
 interface RendererErrorDetail {
@@ -38,11 +27,11 @@ interface RendererErrorDetail {
 }
 
 interface TimelineChangeDetail {
-  index?: number;
-  count?: number;
   eyebrow?: string;
   heading?: string;
   description?: string;
+  /** The slide's entries as JSON: `SlideEntry[]`. */
+  entries?: string;
 }
 
 interface SceneProgressDetail {
@@ -53,12 +42,8 @@ interface SceneProgressDetail {
 
 const WASM_MODULE_PATH = "./pkg/pooya_portfolio.js";
 const WASM_BINARY_PATH = "./pkg/pooya_portfolio_bg.wasm";
-const TIMELINE_PATH = "./data/timeline.json";
 const BUILD_ID = new URL(import.meta.url).searchParams.get("build") ?? "development";
-const MAX_ENTRIES_PER_SLIDE = 4;
 const RENDERER_TIMEOUT_MS = 30_000;
-const UNSUPPORTED_REDIRECT_SECONDS = 7;
-const TIMELINE_FALLBACK_PATH = "/timeline/";
 const PRODUCTION_HOSTNAMES = new Set(["pooya.ai", "www.pooya.ai"]);
 const WEBGPU_UNAVAILABLE_MESSAGE =
   "Welcome to website of Pooya Eimandar, it seems your browser doesn't support WebGPU, please update your browser or use another one.";
@@ -93,104 +78,21 @@ const retryButton = requiredElement<HTMLButtonElement>("retry-button");
 const timelineEyebrow = requiredElement<HTMLElement>("timeline-year");
 const timelineTitle = requiredElement<HTMLElement>("timeline-title");
 const timelineDescription = requiredElement<HTMLElement>("timeline-description");
+const timelineEntries = requiredElement<HTMLElement>("timeline-entries");
+const timelineLinks = requiredElement<HTMLElement>("timeline-links");
 const timelineCopy = requiredElement<HTMLElement>("timeline-copy");
 const copyrightYear = requiredElement<HTMLTimeElement>("copyright-year");
+const siteHeader = document.querySelector<HTMLElement>(".site-header");
 
 const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const loadStageElements = Array.from(document.querySelectorAll<HTMLElement>("[data-stage]"));
-const milestoneElements = Array.from(document.querySelectorAll<HTMLElement>("[data-milestone]"));
 
 let wasmBindings: WasmBindings | null = null;
 let rendererReady = false;
 let rendererTimeout: number | undefined;
-let unsupportedRedirectTimer: number | undefined;
-let slideCount = 10;
-let currentSlide = 0;
-let timelineSlides: TimelineSlide[] = deriveSlidesFromDom();
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
-}
-
-function normaliseText(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function deriveSlidesFromDom(): TimelineSlide[] {
-  return Array.from(document.querySelectorAll<HTMLElement>(".timeline-group")).flatMap((group) => {
-    const range = normaliseText(group.querySelector("header p")?.textContent ?? "Timeline");
-    const entries = Array.from(group.querySelectorAll<HTMLElement>("[data-milestone]"));
-    const slides: TimelineSlide[] = [];
-
-    for (let offset = 0; offset < entries.length; offset += MAX_ENTRIES_PER_SLIDE) {
-      const pageEntries = entries.slice(offset, offset + MAX_ENTRIES_PER_SLIDE);
-      const titles = pageEntries
-        .map((entry) => normaliseText(entry.querySelector("h4")?.textContent ?? ""))
-        .filter(Boolean);
-      slides.push({
-        range,
-        description: `${titles.length} milestone${titles.length === 1 ? "" : "s"} — ${titles.join(" · ")}`,
-      });
-    }
-
-    return slides;
-  });
-}
-
-function buildSlides(data: TimelineData): TimelineSlide[] {
-  return data.sections.flatMap((section) => {
-    const slides: TimelineSlide[] = [];
-    for (let offset = 0; offset < section.entries.length; offset += MAX_ENTRIES_PER_SLIDE) {
-      const entries = section.entries.slice(offset, offset + MAX_ENTRIES_PER_SLIDE);
-      slides.push({
-        range: section.range,
-        description: `${entries.length} milestone${entries.length === 1 ? "" : "s"} — ${entries.map((entry) => entry.title).join(" · ")}`,
-      });
-    }
-    return slides;
-  });
-}
-
-function assertTimelineParity(data: TimelineData): void {
-  const entries = data.sections.flatMap((section) => section.entries);
-  if (entries.length !== milestoneElements.length) {
-    throw new Error(`Timeline mismatch: JSON has ${entries.length} milestones while HTML has ${milestoneElements.length}.`);
-  }
-
-  entries.forEach((entry, index) => {
-    const element = milestoneElements[index];
-    if (!element) {
-      throw new Error(`Timeline mismatch: HTML item ${index + 1} is missing.`);
-    }
-    const domId = element.dataset.id ?? "";
-    const domYear = element.dataset.year ?? "";
-    const domTitle = normaliseText(element.querySelector("h4")?.textContent ?? "");
-
-    if (domId !== entry.id || domYear !== entry.year || domTitle !== entry.title) {
-      throw new Error(`Timeline mismatch at item ${index + 1}: expected ${entry.id} (${entry.year}) / ${entry.title}.`);
-    }
-  });
-}
-
-async function loadTimelineData(): Promise<void> {
-  const response = await fetch(new URL(TIMELINE_PATH, import.meta.url), {
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) {
-    throw new Error(`Timeline data request failed with HTTP ${response.status}.`);
-  }
-
-  const data = (await response.json()) as TimelineData;
-  if (!Array.isArray(data.sections)) {
-    throw new Error("Timeline data has an invalid shape.");
-  }
-
-  assertTimelineParity(data);
-  timelineSlides = buildSlides(data);
-  if (!rendererReady) {
-    slideCount = timelineSlides.length;
-    updateTimelineTranscript(currentSlide);
-  }
 }
 
 function updateLoadStage(stage: LoadStage, progress: number, message: string): void {
@@ -229,40 +131,14 @@ function showUnsupportedBrowser(
   message = WEBGPU_UNAVAILABLE_MESSAGE,
 ): void {
   clearRendererTimeout();
-  clearUnsupportedRedirectCountdown();
   page.dataset.renderState = "unsupported";
   page.classList.remove("webgpu-active");
   timelineCopy.removeAttribute("inert");
   loaderPanel.hidden = true;
   errorPanel.hidden = true;
   unsupportedTitle.textContent = title;
+  unsupportedMessage.textContent = message;
   unsupportedPanel.hidden = false;
-  startUnsupportedRedirectCountdown(message);
-}
-
-function clearUnsupportedRedirectCountdown(): void {
-  if (unsupportedRedirectTimer !== undefined) {
-    window.clearInterval(unsupportedRedirectTimer);
-    unsupportedRedirectTimer = undefined;
-  }
-}
-
-function startUnsupportedRedirectCountdown(message: string): void {
-  let secondsRemaining = UNSUPPORTED_REDIRECT_SECONDS;
-  const updateMessage = (): void => {
-    unsupportedMessage.textContent =
-      `${message} You are going to visit timeline in ${secondsRemaining}s.`;
-  };
-
-  updateMessage();
-  unsupportedRedirectTimer = window.setInterval(() => {
-    secondsRemaining -= 1;
-    updateMessage();
-    if (secondsRemaining <= 0) {
-      clearUnsupportedRedirectCountdown();
-      window.location.replace(TIMELINE_FALLBACK_PATH);
-    }
-  }, 1_000);
 }
 
 function redirectProductionToHttps(): boolean {
@@ -283,11 +159,11 @@ function redirectProductionToHttps(): boolean {
 
 function showRendererError(error: unknown): void {
   clearRendererTimeout();
-  clearUnsupportedRedirectCountdown();
   rendererReady = false;
   page.dataset.renderState = "error";
   page.classList.remove("webgpu-active");
   timelineCopy.removeAttribute("inert");
+  timelineLinks.hidden = true;
   loaderPanel.hidden = true;
   unsupportedPanel.hidden = true;
   errorPanel.hidden = false;
@@ -324,25 +200,58 @@ function handleStartupRejection(event: PromiseRejectionEvent): void {
   }
 }
 
-function updateTimelineTranscript(
-  index: number,
-  eyebrow?: string,
-  heading?: string,
-  description?: string,
-): void {
-  const safeCount = Math.max(1, slideCount);
-  currentSlide = clamp(Math.trunc(index), 0, safeCount - 1);
-  const slide = timelineSlides[currentSlide];
+function slideEntries(json: string | undefined): SlideEntry[] {
+  try {
+    const entries: unknown = JSON.parse(json ?? "[]");
+    return Array.isArray(entries) ? (entries as SlideEntry[]) : [];
+  } catch (error) {
+    console.error("The renderer described a slide in a form the page could not read:", error);
+    return [];
+  }
+}
 
-  timelineEyebrow.textContent = eyebrow || slide?.range || "Pooya's timeline";
-  timelineTitle.textContent = heading || "Pooya's timeline";
-  timelineDescription.textContent = description
-    || slide?.description
-    || "Use the controls to move through Pooya's timeline.";
+// The canvas shows the current slide only as pixels. This mirrors it as text
+// for screen readers, and as real links for anyone not using a pointer.
+function updateTimelineTranscript(detail: TimelineChangeDetail): void {
+  const entries = slideEntries(detail.entries);
+  timelineEyebrow.textContent = detail.eyebrow || "Pooya's timeline";
+  timelineTitle.textContent = detail.heading || "Pooya's timeline";
+  timelineDescription.textContent = detail.description ?? "";
+  timelineEntries.replaceChildren(...entries.flatMap((entry) => {
+    const heading = document.createElement("h3");
+    heading.textContent = `${entry.year} — ${entry.title}`;
+    if (!entry.text) {
+      return [heading];
+    }
+    const text = document.createElement("p");
+    text.textContent = entry.text;
+    return [heading, text];
+  }));
+
+  const links = entries
+    .flatMap((entry) => entry.links)
+    .filter((link) => link.url.startsWith("https://"));
+  timelineLinks.replaceChildren(...links.map((link) => {
+    const anchor = document.createElement("a");
+    anchor.href = link.url;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.textContent = link.label;
+    return anchor;
+  }));
+  timelineLinks.hidden = links.length === 0;
 }
 
 function applySystemMotionPreference(): void {
   wasmBindings?.set_reduced_motion?.(motionQuery.matches);
+}
+
+// The fixed header covers the top of the canvas, so the renderer lays the
+// terminal out below it.
+function reportHeaderHeight(): void {
+  if (siteHeader) {
+    wasmBindings?.set_header_height?.(siteHeader.getBoundingClientRect().height);
+  }
 }
 
 function installCanvasLinkActivation(): void {
@@ -416,15 +325,9 @@ function handlePrimaryKeyboardAction(event: KeyboardEvent): void {
   wasmBindings?.reveal_or_advance_timeline?.();
 }
 
-function handleRendererReady(event: Event): void {
-  const detail = (event as CustomEvent<RendererReadyDetail>).detail ?? {};
-  if (typeof detail.slideCount === "number" && Number.isFinite(detail.slideCount)) {
-    slideCount = Math.max(1, Math.trunc(detail.slideCount));
-  }
-
+function handleRendererReady(): void {
   rendererReady = true;
   clearRendererTimeout();
-  clearUnsupportedRedirectCountdown();
   page.dataset.renderState = "ready";
   page.classList.add("webgpu-active");
   // Keep the complete, server-delivered timeline in the document for search
@@ -436,20 +339,12 @@ function handleRendererReady(event: Event): void {
   loaderPanel.hidden = true;
   unsupportedPanel.hidden = true;
   errorPanel.hidden = true;
-  updateTimelineTranscript(currentSlide);
   applySystemMotionPreference();
   installCanvasLinkActivation();
 }
 
 function handleTimelineChange(event: Event): void {
-  const detail = (event as CustomEvent<TimelineChangeDetail>).detail ?? {};
-  if (typeof detail.count === "number" && Number.isFinite(detail.count)) {
-    slideCount = Math.max(1, Math.trunc(detail.count));
-  }
-  const index = typeof detail.index === "number" && Number.isFinite(detail.index)
-    ? Math.trunc(detail.index)
-    : currentSlide;
-  updateTimelineTranscript(index, detail.eyebrow, detail.heading, detail.description);
+  updateTimelineTranscript((event as CustomEvent<TimelineChangeDetail>).detail ?? {});
 }
 
 function handleSceneProgress(event: Event): void {
@@ -499,12 +394,15 @@ async function initialiseRenderer(): Promise<void> {
       throw new Error("The generated WebAssembly module has no default initializer.");
     }
 
-    wasmBindings = bindings;
     updateLoadStage("matrix", 16, "Starting the Rust/WebGPU renderer.");
     await bindings.default({
       module_or_path: versionedRuntimeUrl(WASM_BINARY_PATH),
     });
+    // Exports throw until the module is initialized, and the header's resize
+    // observer can fire before then.
+    wasmBindings = bindings;
     applySystemMotionPreference();
+    reportHeaderHeight();
   } catch (error) {
     showRendererError(error);
   }
@@ -520,14 +418,12 @@ window.addEventListener("keydown", handlePrimaryKeyboardAction);
 
 retryButton.addEventListener("click", () => window.location.reload());
 motionQuery.addEventListener("change", applySystemMotionPreference);
+if (siteHeader) {
+  new ResizeObserver(reportHeaderHeight).observe(siteHeader);
+}
 
 const currentYear = new Date().getFullYear().toString();
 copyrightYear.dateTime = currentYear;
 copyrightYear.textContent = currentYear;
-updateTimelineTranscript(0, "1987–2008", "Origins");
-
-void loadTimelineData().catch((error: unknown) => {
-  console.warn("The canonical timeline data could not be validated; using the semantic HTML copy.", error);
-});
 
 void initialiseRenderer();

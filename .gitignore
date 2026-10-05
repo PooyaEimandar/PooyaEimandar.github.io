@@ -10,13 +10,13 @@
 /app.js
 /app.js.map
 
-# The portrait is a private, build-time-only KTX conversion input.
-/asset/Pooya.jpeg
+# The portrait photograph is a private, build-time-only KTX conversion input.
+# No JPEG belongs in this repository; CI refuses one that is committed.
+*.jpg
+*.jpeg
 
 # Local texture-pipeline caches and authoring files
 **/__pycache__/
 *.py[cod]
-/tools/textures/.venv/
-/tools/textures/work/
 *.blend
 *.blend1

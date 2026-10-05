@@ -1,13 +1,15 @@
 //! Strict loader for the single uncompressed KTX1 portrait used by WebGPU.
 //!
-//! The private JPEG is a local build input only. The browser fetches one
+//! The private JPEG is a local build input only. The renderer carries one
 //! top-down, uncompressed RGBA8 KTX level and uploads those bytes directly to
 //! an sRGB WebGPU texture; no browser image decoder or TypeScript bridge is
 //! involved.
 
 use sib::render::{RenderError, RenderResult};
 
-pub const PORTRAIT_KTX_URL: &str = "assets/textures/pooya.ktx";
+// Embedded rather than fetched: the host compresses the WebAssembly module in
+// transit, but would send a standalone `.ktx` at its full megabyte.
+const PORTRAIT_KTX: &[u8] = include_bytes!("../assets/textures/pooya.ktx");
 
 const KTX1_IDENTIFIER: [u8; 12] = [
     0xAB, b'K', b'T', b'X', b' ', b'1', b'1', 0xBB, 0x0D, 0x0A, 0x1A, 0x0A,
@@ -140,43 +142,8 @@ fn read_u32(bytes: &[u8], offset: usize) -> RenderResult<u32> {
     })?))
 }
 
-#[cfg(not(target_arch = "wasm32"))]
 pub fn load_default_portrait() -> RenderResult<RgbaKtxImage> {
-    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let bytes = std::fs::read(manifest_dir.join(PORTRAIT_KTX_URL)).map_err(|error| {
-        RenderError::message(format!("failed to read {PORTRAIT_KTX_URL}: {error}"))
-    })?;
-    parse_ktx1_rgba8(&bytes)
-}
-
-#[cfg(target_arch = "wasm32")]
-pub async fn load_default_portrait() -> RenderResult<RgbaKtxImage> {
-    use wasm_bindgen::JsCast;
-    use wasm_bindgen_futures::JsFuture;
-
-    let window =
-        web_sys::window().ok_or_else(|| RenderError::message("browser window is unavailable"))?;
-    let response = JsFuture::from(window.fetch_with_str(PORTRAIT_KTX_URL))
-        .await
-        .map_err(|error| {
-            RenderError::message(format!("failed to fetch {PORTRAIT_KTX_URL}: {error:?}"))
-        })?;
-    let response: web_sys::Response = response.dyn_into().map_err(|_| {
-        RenderError::message(format!("fetch for {PORTRAIT_KTX_URL} returned no Response",))
-    })?;
-    if !response.ok() {
-        return Err(RenderError::message(format!(
-            "failed to fetch {PORTRAIT_KTX_URL}: HTTP {}",
-            response.status(),
-        )));
-    }
-    let buffer = response.array_buffer().map_err(|error| {
-        RenderError::message(format!("failed to read {PORTRAIT_KTX_URL}: {error:?}",))
-    })?;
-    let buffer = JsFuture::from(buffer).await.map_err(|error| {
-        RenderError::message(format!("failed to read {PORTRAIT_KTX_URL}: {error:?}",))
-    })?;
-    parse_ktx1_rgba8(&js_sys::Uint8Array::new(&buffer).to_vec())
+    parse_ktx1_rgba8(PORTRAIT_KTX)
 }
 
 #[cfg(test)]
@@ -260,14 +227,13 @@ mod tests {
         assert!(parse_ktx1_rgba8(&trailing).is_err());
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn production_portrait_is_a_matted_square_ktx() {
         let image = load_default_portrait().unwrap();
         assert_eq!((image.width, image.height), (512, 512));
         assert_eq!(image.aspect_ratio(), 1.0);
 
-        let alpha = image.rgba.chunks_exact(4).map(|pixel| pixel[3]);
+        let alpha = image.rgba.as_chunks::<4>().0.iter().map(|pixel| pixel[3]);
         let (transparent, subject) = alpha.fold((0_usize, 0_usize), |counts, value| {
             (
                 counts.0 + usize::from(value == 0),

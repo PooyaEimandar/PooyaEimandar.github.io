@@ -54,7 +54,7 @@
   <a class="skip-link" href="#timeline-content">Skip to the timeline</a>
 
   <header class="site-header" aria-label="Site header">
-    <a class="wordmark" href="/" aria-label="Return to the WebGPU experience">
+    <a class="wordmark" href="/">
       <span class="wordmark-name">Stay Hungry, Stay Foolish</span>
     </a>
 
@@ -483,8 +483,13 @@
 
   <footer class="site-footer">
     <p><a href="/">Go to the interactive timeline</a></p>
-    <p>© 2026 Pooya Eimandar. All rights reserved.</p>
+    <p>© <time id="copyright-year" datetime="2026">2026</time> Pooya Eimandar. All rights reserved.</p>
   </footer>
+  <script>
+    // The page is generated ahead of time; this keeps the copyright year current.
+    const copyrightYear = document.getElementById("copyright-year");
+    copyrightYear.dateTime = copyrightYear.textContent = new Date().getFullYear();
+  </script>
 </body>
 
 </html>

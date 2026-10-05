@@ -37,9 +37,24 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          components: clippy, rustfmt
+
+      - name: Refuse a committed portrait source
+        run: test -z "$(git ls-files | grep -iE '\.jpe?g$')"
+
+      - name: Check the generated timelines and the TypeScript bridge
+        run: |
+          npm run check:timeline
+          npm run check
+
+      - name: Check and test the renderer
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
 
       - name: Install the matching wasm-bindgen CLI
-        run: cargo install wasm-bindgen-cli --version 0.2.126 --locked
+        run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
 
       - name: Generate timelines and build the site
         run: ./build.sh --release
