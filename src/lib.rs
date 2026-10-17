@@ -1037,6 +1037,17 @@ impl Example for Portfolio {
     }
 
     fn init(&mut self, context: &mut RenderContext) -> RenderResult<()> {
+        self.has_encoded_frame = false;
+        self.renderer_ready_dispatched = false;
+        self.frame_stats = FrameStats::new();
+        self.cursor_position = None;
+        self.touch_gesture = None;
+        self.hovered_link = None;
+        self.wheel = WheelGesture::default();
+        PRIMARY_ACTION_REQUEST.store(false, Ordering::Relaxed);
+        #[cfg(target_arch = "wasm32")]
+        LINK_PICK_SNAPSHOT.with(|snapshot| *snapshot.borrow_mut() = None);
+
         #[cfg(target_arch = "wasm32")]
         let validation_scope = context
             .device
@@ -2238,7 +2249,9 @@ fn mount_browser_canvas(context: &RenderContext) {
     if let Some(document) = web_sys::window().and_then(|window| window.document())
         && let Some(mount) = document.get_element_by_id("scene-mount")
     {
-        let _ = mount.append_child(&canvas);
+        // Dropping a winit window leaves its canvas in the DOM. A resumed
+        // window must replace that frozen canvas, not stack beneath it.
+        mount.replace_children_with_node_1(&canvas);
     }
 }
 

@@ -39,6 +39,22 @@ python3 -m http.server 8090 --bind 127.0.0.1 --directory _site
 
 Open [the local website](http://127.0.0.1:8090/).
 
+## Browser resume regression check
+
+After building, copy the local-only test page into the preview output:
+
+```sh
+cp tests/renderer-resume.html _site/renderer-resume.html
+```
+
+Open `/renderer-resume.html` on the local preview and run its three restore
+cycles. It sends persisted `pagehide`/`pageshow` events to the real WebGPU
+renderer and checks that each restore replaces the canvas, reconnects input,
+and preserves the current slide. This simulates lifecycle delivery; also check
+Home → Timeline → browser Back on a desktop and a mobile browser to exercise
+their actual back/forward cache behavior. The test page is not deployed by the
+build script.
+
 ## Deployment
 
 GitHub Actions runs the release build on every push to `master`, generating and
