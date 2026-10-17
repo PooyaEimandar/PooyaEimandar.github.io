@@ -90,6 +90,7 @@ const loadStageElements = Array.from(document.querySelectorAll<HTMLElement>("[da
 let wasmBindings: WasmBindings | null = null;
 let rendererReady = false;
 let rendererTimeout: number | undefined;
+let rendererSuspended = false;
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
@@ -124,6 +125,42 @@ function clearRendererTimeout(): void {
     window.clearTimeout(rendererTimeout);
     rendererTimeout = undefined;
   }
+}
+
+function startRendererTimeout(): void {
+  clearRendererTimeout();
+  rendererTimeout = window.setTimeout(() => {
+    if (!rendererReady) {
+      showRendererError(new Error("The renderer did not become ready within 30 seconds."));
+    }
+  }, RENDERER_TIMEOUT_MS);
+}
+
+function handlePageHide(event: PageTransitionEvent): void {
+  clearRendererTimeout();
+  // The renderer library suspends on a persisted pagehide and creates a new
+  // canvas on pageshow. Leave the cached picture intact until it returns.
+  rendererSuspended = event.persisted
+    && (rendererReady || page.dataset.renderState === "loading");
+  if (rendererSuspended) {
+    rendererReady = false;
+  }
+}
+
+function handlePageShow(event: PageTransitionEvent): void {
+  if (!event.persisted || !rendererSuspended) {
+    return;
+  }
+  rendererSuspended = false;
+  page.dataset.renderState = "loading";
+  loaderPanel.hidden = false;
+  errorPanel.hidden = true;
+  timelineLinks.hidden = true;
+  updateLoadStage("matrix", 8, "Restoring the WebGPU timeline.");
+  reportHeaderHeight();
+  // Sib owns the existing event loop and reinitializes its GPU resources.
+  // Calling the WASM initializer again would not restart that loop.
+  startRendererTimeout();
 }
 
 function showUnsupportedBrowser(
@@ -327,6 +364,7 @@ function handlePrimaryKeyboardAction(event: KeyboardEvent): void {
 
 function handleRendererReady(): void {
   rendererReady = true;
+  rendererSuspended = false;
   clearRendererTimeout();
   page.dataset.renderState = "ready";
   page.classList.add("webgpu-active");
@@ -381,11 +419,7 @@ async function initialiseRenderer(): Promise<void> {
   errorPanel.hidden = true;
   updateLoadStage("matrix", 8, "WebGPU detected. Establishing the matrix signal.");
 
-  rendererTimeout = window.setTimeout(() => {
-    if (!rendererReady) {
-      showRendererError(new Error("The renderer did not become ready within 30 seconds."));
-    }
-  }, RENDERER_TIMEOUT_MS);
+  startRendererTimeout();
 
   try {
     const moduleUrl = versionedRuntimeUrl(WASM_MODULE_PATH).href;
@@ -415,6 +449,8 @@ window.addEventListener("pooya:scene-progress", handleSceneProgress);
 window.addEventListener("error", handleStartupWindowError);
 window.addEventListener("unhandledrejection", handleStartupRejection);
 window.addEventListener("keydown", handlePrimaryKeyboardAction);
+window.addEventListener("pagehide", handlePageHide);
+window.addEventListener("pageshow", handlePageShow);
 
 retryButton.addEventListener("click", () => window.location.reload());
 motionQuery.addEventListener("change", applySystemMotionPreference);

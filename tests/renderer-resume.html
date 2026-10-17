@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebGPU resume regression check</title>
+<h1>WebGPU resume regression check</h1>
+<p>Exercises the real renderer with cached page lifecycle events. Use browser Back separately to verify actual cache eligibility.</p>
+<label>Viewport <select id="viewport"><option value="desktop">Desktop</option><option value="phone">Phone</option></select></label>
+<button id="run">Run three restore cycles</button>
+<pre id="result" aria-live="polite">Ready to test.</pre>
+<iframe id="portfolio" title="Portfolio under test" width="1200" height="780"></iframe>
+<script type="module">
+  const frame = document.getElementById('portfolio');
+  const run = document.getElementById('run');
+  const result = document.getElementById('result');
+  // Each test run loads the latest local build, even when the homepage shell
+  // from an earlier preview is still fresh in the browser's HTTP cache.
+  frame.src = `/?resume-check=${Date.now()}`;
+  document.getElementById('viewport').onchange = event => {
+    frame.width = event.target.value === 'phone' ? '390' : '1200';
+    frame.height = event.target.value === 'phone' ? '844' : '780';
+  };
+  const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  async function until(predicate) {
+    const deadline = performance.now() + 35000;
+    while (!predicate()) {
+      if (performance.now() > deadline) throw new Error('Renderer did not resume within 35 seconds');
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+  run.onclick = async () => {
+    run.disabled = true;
+    result.textContent = 'Waiting for initial render…';
+    let onReady;
+    let w;
+    try {
+      await until(() => frame.contentDocument?.body?.dataset.renderState === 'ready');
+      w = frame.contentWindow;
+      const doc = frame.contentDocument;
+      let readyEvents = 0;
+      onReady = () => { readyEvents++; };
+      w.addEventListener('pooya:renderer-ready', onReady);
+
+      // Move away from the first slide to catch restoration that resets position.
+      const firstCanvas = doc.getElementById('webgpu-canvas');
+      firstCanvas.dispatchEvent(new w.KeyboardEvent('keydown', {
+        key: 'End', code: 'End', bubbles: true,
+      }));
+      firstCanvas.dispatchEvent(new w.KeyboardEvent('keyup', {
+        key: 'End', code: 'End', bubbles: true,
+      }));
+      await until(() => doc.getElementById('timeline-title').textContent.includes('Leadership'));
+      const slide = doc.getElementById('timeline-year').textContent;
+
+      for (let cycle = 1; cycle <= 3; cycle++) {
+        result.textContent = `Restoring cycle ${cycle}/3…`;
+        const previous = doc.getElementById('webgpu-canvas');
+        w.dispatchEvent(new w.PageTransitionEvent('pagehide', { persisted: true }));
+        // Let destruction finish before creating another winit window.
+        await new Promise(resolve => setTimeout(resolve, 100));
+        w.dispatchEvent(new w.PageTransitionEvent('pageshow', { persisted: true }));
+        await until(() => readyEvents === cycle && doc.body.dataset.renderState === 'ready');
+        const canvases = doc.querySelectorAll('#webgpu-canvas');
+        assert(canvases.length === 1, `Cycle ${cycle}: duplicate canvases`);
+        const canvas = canvases[0];
+        assert(canvas !== previous && !previous.isConnected, `Cycle ${cycle}: stale canvas retained`);
+        assert(canvas.dataset.linkActivation === 'ready', `Cycle ${cycle}: pointer bridge missing`);
+        assert(canvas.getBoundingClientRect().top === 0, `Cycle ${cycle}: canvas outside scene`);
+        assert(doc.getElementById('timeline-year').textContent === slide, `Cycle ${cycle}: lost slide position`);
+        assert(doc.getElementById('timeline-copy').hasAttribute('inert'), `Cycle ${cycle}: fallback remained active`);
+      }
+      result.textContent = 'PASS: three restores, one canvas, input bridge reconnected, slide preserved.';
+    } catch (error) {
+      result.textContent = `FAIL: ${error.message}`;
+    } finally {
+      if (onReady) w.removeEventListener('pooya:renderer-ready', onReady);
+      run.disabled = false;
+    }
+  };
+</script>
+</html>
