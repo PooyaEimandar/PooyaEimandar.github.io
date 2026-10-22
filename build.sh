@@ -45,9 +45,12 @@ cp data/timeline.json _site/data/
 cp assets/fonts/FiraMono-LICENSE.txt assets/fonts/Vazirmatn-LICENSE.txt _site/assets/fonts/
 touch _site/.nojekyll
 
-# The sitemap lists the pages this repository publishes; /notes/ and /webgpu/
-# publish their own, which robots.txt lists. Each lastmod is the date of the
-# last commit that changed the page, so it is left out when there is no history.
+# sitemap.xml is an index of every sitemap on pooya.ai, so Search Console needs
+# only that one address. A section published from another repository adds its
+# sitemap to section_sitemaps. Each lastmod is the date of the last commit that
+# changed the page, so it is left out when there is no history.
+section_sitemaps="https://pooya.ai/notes/sitemap.xml https://pooya.ai/webgpu/sitemap.xml"
+
 sitemap_url() {
   page_url="$1"
   shift
@@ -64,6 +67,14 @@ sitemap_url() {
   sitemap_url "https://pooya.ai/" index.html data/timeline.json
   sitemap_url "https://pooya.ai/timeline/" timeline/index.html data/timeline.json
   printf '</urlset>\n'
+} > _site/sitemap-pages.xml
+{
+  printf '<?xml version="1.0" encoding="UTF-8"?>\n'
+  printf '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+  for section_sitemap in https://pooya.ai/sitemap-pages.xml $section_sitemaps; do
+    printf '  <sitemap>\n    <loc>%s</loc>\n  </sitemap>\n' "$section_sitemap"
+  done
+  printf '</sitemapindex>\n'
 } > _site/sitemap.xml
 if find _site -type f \( -iname '*.jpeg' -o -iname '*.jpg' -o -iname '*.gltf' -o -iname '*.bin' -o -iname '*.wgsl' -o -iname '*.ttf' -o -iname '*.ktx' -o -iname '*.ts' \) -print -quit | grep -q .; then
   echo "Source files and embedded renderer inputs must not be deployed." >&2

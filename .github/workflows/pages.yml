@@ -21,7 +21,7 @@ jobs:
       - name: Check out the site
         uses: actions/checkout@v4
         with:
-          # The sitemap's lastmod dates come from each page's commit history.
+          # The sitemaps' lastmod dates come from each page's commit history.
           fetch-depth: 0
 
       - name: Configure GitHub Pages
