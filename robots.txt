@@ -2,5 +2,3 @@ User-agent: *
 Allow: /
 
 Sitemap: https://pooya.ai/sitemap.xml
-Sitemap: https://pooya.ai/notes/sitemap.xml
-Sitemap: https://pooya.ai/webgpu/sitemap.xml
