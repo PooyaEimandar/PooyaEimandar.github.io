@@ -285,8 +285,19 @@ body[data-render-state="ready"] .scene-grid {
   text-transform: none;
 }
 
-.hero-intro h1 span {
+/* The prompt is decoration: kept out of the heading's text, which is the name. */
+.hero-intro h1::before {
   color: var(--matrix);
+  content: "pooya@portfolio:~$ ";
+}
+
+.hero-intro h1::after {
+  color: var(--matrix);
+  content: " — ./timeline --realtime";
+}
+
+.hero-summary::before {
+  content: "> ";
 }
 
 .hero-summary {
@@ -472,12 +483,58 @@ body[data-render-state="ready"] .scene-grid {
   white-space: nowrap !important;
 }
 
+/* Crawlers get the page without the scene: the intro flows into the page so
+   the About section and the timeline follow it instead of a screen of space. */
+body[data-render-state="static"] .experience {
+  min-height: 0;
+  padding: calc(var(--header-height) + 2rem) var(--page-gutter) 0;
+}
+
+body[data-render-state="static"] .hero-intro {
+  /* Relative, not static, so it still stacks above the scene's backdrop. */
+  position: relative;
+  top: auto;
+  left: auto;
+  width: auto;
+  max-width: 52rem;
+}
+
 body[data-render-state="ready"] .hero-intro,
 body[data-render-state="ready"] .loader-panel {
   visibility: hidden;
   opacity: 0;
   transform: translateY(1rem);
   pointer-events: none;
+}
+
+.about {
+  position: relative;
+  z-index: 2;
+  padding: clamp(4rem, 8vw, 6rem) var(--page-gutter) 0;
+  color: var(--ink);
+  background: var(--void-soft);
+}
+
+.about > * {
+  max-width: 72rem;
+  margin-inline: auto;
+}
+
+.about h2 {
+  margin-block: 0 1rem;
+  color: var(--matrix);
+  font: 600 clamp(0.95rem, 2vw, 1.2rem)/1.5 var(--mono);
+}
+
+.about > p:not(.eyebrow) {
+  margin-block: 0 1rem;
+  color: var(--ink-muted);
+  font: 400 clamp(0.78rem, 1.3vw, 0.9rem)/1.8 var(--mono);
+}
+
+.about a,
+.timeline-copy-header a {
+  color: var(--matrix-bright);
 }
 
 .timeline-copy {
@@ -668,6 +725,7 @@ body.webgpu-active .timeline-copy {
   word-break: break-word;
 }
 
+body.webgpu-active .about,
 body.webgpu-active .contact-panel,
 body.webgpu-active .site-footer {
   position: absolute !important;

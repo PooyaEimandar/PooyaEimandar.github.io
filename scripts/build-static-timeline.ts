@@ -27,25 +27,91 @@ interface TimelineData {
 
 type RenderTarget = "home" | "page";
 
+const siteUrl = "https://pooya.ai/";
+const personId = `${siteUrl}#person`;
+const websiteId = `${siteUrl}#website`;
+
+type PageKind = "home" | "timeline";
+
 // Deliberately not rendered as page copy. This Persian introduction exists so
 // search engines can associate both spellings of Pooya's name with a Persian
-// description of who he is; it ships as `Person.description` in the JSON-LD of
-// both pages instead of as hidden text, which search engines discount.
+// description of who he is; it ships, language-tagged beside the English one,
+// as `Person.description` in the JSON-LD of both pages instead of as hidden
+// text, which search engines discount.
 const persianIntroduction = "پویا ایماندار (پویا ایمان دار)، کارآفرین حوزهٔ فناوری در ایران و امارات و از بنیان‌گذاران پلی‌پاد، پلتفرم بازی ابری، است.";
+const englishIntroduction =
+  "Pooya Eimandar is a technology entrepreneur and graphics engineer. He co-founded PlayPod, the first cloud-gaming platform in Iran and the MENA, wrote DirectX 11.1 Game Programming, co-authored Integrating Rust, and develops Sib, an open-source Rust library for real-time streaming, networking, and WebGPU rendering.";
 
-const personStructuredData = {
-  "@context": "https://schema.org",
-  "@type": "Person",
-  name: "Pooya Eimandar",
-  alternateName: ["Pooya Imandar", "پویا ایماندار", "پویا ایمان دار"],
-  description: persianIntroduction,
-  url: "https://pooya.ai/",
-  sameAs: [
-    "https://github.com/PooyaEimandar",
-    "https://www.youtube.com/channel/UC5XZoDB5YHd07WSWeMAYyZQ",
-  ],
-  knowsAbout: ["Rust", "WebGPU", "Real-time graphics", "Game engines", "Cloud gaming"],
-};
+// One graph for the whole site: every page, note, and tutorial that names
+// Pooya points at `personId`, so search engines see a single person.
+const sharedGraph = [
+  {
+    "@type": "WebSite",
+    "@id": websiteId,
+    url: siteUrl,
+    name: "Pooya Eimandar",
+    alternateName: "pooya.ai",
+    inLanguage: "en",
+    publisher: { "@id": personId },
+  },
+  {
+    "@type": "Person",
+    "@id": personId,
+    name: "Pooya Eimandar",
+    alternateName: ["Pooya Imandar", "پویا ایماندار", "پویا ایمان دار"],
+    description: [
+      { "@language": "en", "@value": englishIntroduction },
+      { "@language": "fa", "@value": persianIntroduction },
+    ],
+    jobTitle: "Technology entrepreneur and graphics engineer",
+    worksFor: { "@type": "Organization", name: "AINU Tech Source" },
+    alumniOf: { "@type": "CollegeOrUniversity", name: "Shomal University", url: "https://shomal.ac.ir/en/" },
+    image: "https://avatars.githubusercontent.com/u/1788248?v=4",
+    url: siteUrl,
+    sameAs: [
+      "https://github.com/PooyaEimandar",
+      "https://www.youtube.com/channel/UC5XZoDB5YHd07WSWeMAYyZQ",
+    ],
+    knowsAbout: ["Rust", "WebGPU", "Real-time graphics", "Game engines", "Cloud gaming"],
+  },
+  {
+    "@type": "Book",
+    name: "DirectX 11.1 Game Programming",
+    isbn: "9781849694803",
+    author: { "@id": personId },
+    publisher: { "@type": "Organization", name: "Packt Publishing" },
+    datePublished: "2013",
+  },
+  {
+    "@type": "Book",
+    name: "Integrating Rust",
+    author: [{ "@id": personId }, { "@type": "Person", name: "Abhishek Kumar" }],
+    datePublished: "2024",
+  },
+];
+
+function pageStructuredData(kind: PageKind): object {
+  const page = kind === "home"
+    ? {
+      "@type": "ProfilePage",
+      "@id": `${siteUrl}#profile`,
+      url: siteUrl,
+      name: "Pooya Eimandar — Technology Entrepreneur & Graphics Engineer",
+      isPartOf: { "@id": websiteId },
+      mainEntity: { "@id": personId },
+      inLanguage: "en",
+    }
+    : {
+      "@type": "WebPage",
+      "@id": `${siteUrl}timeline/#webpage`,
+      url: `${siteUrl}timeline/`,
+      name: "Pooya Eimandar's Timeline",
+      isPartOf: { "@id": websiteId },
+      about: { "@id": personId },
+      inLanguage: "en",
+    };
+  return { "@context": "https://schema.org", "@graph": [page, ...sharedGraph] };
+}
 
 const projectRoot = new URL("../", import.meta.url);
 const timelineDataUrl = new URL("data/timeline.json", projectRoot);
@@ -159,8 +225,8 @@ function validateTimeline(data: unknown): asserts data is TimelineData {
 }
 
 /// Escapes `<` so the payload can never terminate the surrounding script tag.
-function renderStructuredData(indent: string): string {
-  const json = JSON.stringify(personStructuredData, null, 2)
+function renderStructuredData(indent: string, kind: PageKind): string {
+  const json = JSON.stringify(pageStructuredData(kind), null, 2)
     .replaceAll("<", "\\u003C")
     .split("\n")
     .map((line) => `${indent}  ${line}`)
@@ -264,16 +330,20 @@ function renderTimelinePage(data: TimelineData): string {
   <meta property="og:title" content="Pooya Eimandar's Timeline">
   <meta property="og:description" content="Pooya Eimandar's milestones across graphics, games, publishing, teaching, and technology leadership.">
   <meta property="og:url" content="https://pooya.ai/timeline/">
-  <meta property="og:image" content="https://github.com/PooyaEimandar.png?size=512">
-  <meta property="og:image:alt" content="Pooya Eimandar">
+  <meta property="og:site_name" content="Pooya Eimandar">
+  <meta property="og:image" content="https://pooya.ai/assets/images/social.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Pooya Eimandar, technology entrepreneur and graphics engineer">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Pooya Eimandar's Timeline">
   <meta name="twitter:description" content="Pooya Eimandar's milestones across graphics, games, publishing, teaching, and technology leadership.">
-  <meta name="twitter:image" content="https://github.com/PooyaEimandar.png?size=512">
+  <meta name="twitter:image" content="https://pooya.ai/assets/images/social.png">
+  <meta name="twitter:image:alt" content="Pooya Eimandar, technology entrepreneur and graphics engineer">
   <link rel="canonical" href="https://pooya.ai/timeline/">
   <link rel="stylesheet" href="../assets/css/site.css">
   <title>Pooya Eimandar's Timeline</title>
-${renderStructuredData("  ")}
+${renderStructuredData("  ", "timeline")}
 </head>
 
 <body class="timeline-page">
@@ -300,7 +370,7 @@ ${renderStructuredData("  ")}
     <article class="timeline-copy" aria-labelledby="timeline-page-title">
       <header class="timeline-copy-header">
         <p class="eyebrow">${firstYear} — ${lastYear}</p>
-        <h1 id="timeline-page-title">${escapeHtml(data.title)}</h1>
+        <h1 id="timeline-page-title">Pooya Eimandar&#39;s Timeline</h1>
         <p>All milestones across graphics, games, publishing, teaching, technology leadership, and cloud platforms.</p>
       </header>
 
@@ -373,7 +443,7 @@ const expectedHomePage = replaceMarkedRegion(
     currentHomePage,
     homeStructuredDataStart,
     homeStructuredDataEnd,
-    renderStructuredData("  "),
+    renderStructuredData("  ", "home"),
     "generated structured data",
   ),
   homeTimelineStart,

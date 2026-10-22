@@ -81,6 +81,7 @@ const timelineDescription = requiredElement<HTMLElement>("timeline-description")
 const timelineEntries = requiredElement<HTMLElement>("timeline-entries");
 const timelineLinks = requiredElement<HTMLElement>("timeline-links");
 const timelineCopy = requiredElement<HTMLElement>("timeline-copy");
+const aboutSection = requiredElement<HTMLElement>("about");
 const copyrightYear = requiredElement<HTMLTimeElement>("copyright-year");
 const siteHeader = document.querySelector<HTMLElement>(".site-header");
 
@@ -136,6 +137,25 @@ function startRendererTimeout(): void {
   }, RENDERER_TIMEOUT_MS);
 }
 
+// The scene covers the page's text, which stays in the document for search
+// engines; while it is out of view, its links leave the keyboard focus order.
+function setReadingCopyInert(inert: boolean): void {
+  for (const element of [aboutSection, timelineCopy]) {
+    element.toggleAttribute("inert", inert);
+  }
+}
+
+// Crawlers index the HTML, which the full-screen scene would clip out of view,
+// so they get the page a browser without WebGPU gets, minus the prompt to
+// change browsers.
+const CRAWLER_AGENT =
+  /googlebot|google-inspectiontool|bingbot|duckduckbot|yandex|baiduspider|applebot|petalbot|seznambot|slurp|facebookexternalhit|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|whatsapp/i;
+
+function showStaticPage(): void {
+  page.dataset.renderState = "static";
+  loaderPanel.hidden = true;
+}
+
 function handlePageHide(event: PageTransitionEvent): void {
   clearRendererTimeout();
   // The renderer library suspends on a persisted pagehide and creates a new
@@ -170,7 +190,7 @@ function showUnsupportedBrowser(
   clearRendererTimeout();
   page.dataset.renderState = "unsupported";
   page.classList.remove("webgpu-active");
-  timelineCopy.removeAttribute("inert");
+  setReadingCopyInert(false);
   loaderPanel.hidden = true;
   errorPanel.hidden = true;
   unsupportedTitle.textContent = title;
@@ -199,7 +219,7 @@ function showRendererError(error: unknown): void {
   rendererReady = false;
   page.dataset.renderState = "error";
   page.classList.remove("webgpu-active");
-  timelineCopy.removeAttribute("inert");
+  setReadingCopyInert(false);
   timelineLinks.hidden = true;
   loaderPanel.hidden = true;
   unsupportedPanel.hidden = true;
@@ -368,11 +388,9 @@ function handleRendererReady(): void {
   clearRendererTimeout();
   page.dataset.renderState = "ready";
   page.classList.add("webgpu-active");
-  // Keep the complete, server-delivered timeline in the document for search
-  // engines while removing its clipped links from the keyboard focus order.
   // The live transcript above remains the accessible representation of the
   // currently rendered WebGPU page.
-  timelineCopy.setAttribute("inert", "");
+  setReadingCopyInert(true);
   updateLoadStage("timeline", 100, "Pooya's timeline is ready.");
   loaderPanel.hidden = true;
   unsupportedPanel.hidden = true;
@@ -394,6 +412,11 @@ function handleSceneProgress(event: Event): void {
 
 async function initialiseRenderer(): Promise<void> {
   if (redirectProductionToHttps()) {
+    return;
+  }
+
+  if (CRAWLER_AGENT.test(navigator.userAgent)) {
+    showStaticPage();
     return;
   }
 
