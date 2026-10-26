@@ -467,6 +467,14 @@
               "label": "Sib",
               "url": "https://github.com/PooyaEimandar/sib"
             }
+          ],
+          "embeds": [
+            {
+              "src": "https://www.youtube.com/embed/F5sDWlfcBrE?si=dlpY3ql8MHrHurYd",
+              "title": "PlayPod: play limitless on the clouds",
+              "width": 560,
+              "height": 315
+            }
           ]
         },
         {
@@ -540,6 +548,14 @@
             {
               "label": "PlayPod",
               "url": "https://playpod.ir/"
+            }
+          ],
+          "embeds": [
+            {
+              "src": "https://www.youtube.com/embed/PlJO2MLS8zY?si=1OuFSq43F-j2j7k7",
+              "title": "PlayPod announces its Nexus update (in Persian)",
+              "width": 560,
+              "height": 315
             }
           ]
         },
