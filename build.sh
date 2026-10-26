@@ -19,6 +19,26 @@ case "$portfolio_profile" in
     ;;
 esac
 
+# Each page image in assets/images is a JPEG with a WebP beside it, for
+# <picture>. A missing or outdated WebP is made here; CI has the committed one.
+for image_jpg in assets/images/*.jpg; do
+  [ -e "$image_jpg" ] || continue
+  image_webp="${image_jpg%.jpg}.webp"
+  if [ -f "$image_webp" ] && [ ! "$image_jpg" -nt "$image_webp" ]; then
+    continue
+  fi
+  if command -v cwebp >/dev/null 2>&1; then
+    cwebp -quiet -q 82 "$image_jpg" -o "$image_webp"
+  elif command -v magick >/dev/null 2>&1; then
+    magick "$image_jpg" -quality 82 "$image_webp"
+  elif [ ! -f "$image_webp" ]; then
+    echo "$image_webp is missing; install cwebp or ImageMagick to create it." >&2
+    exit 1
+  else
+    echo "warning: $image_jpg is newer than $image_webp; install cwebp to refresh it." >&2
+  fi
+done
+
 # CI runs `npm run check:timeline` before this script, so HTML that was
 # committed stale fails there instead of being regenerated here unnoticed.
 echo "Generating SEO timelines from data/timeline.json"
@@ -41,6 +61,10 @@ sed "s/__BUILD_ID__/${portfolio_build_id}/g" index.html > _site/index.html
 cp timeline/index.html _site/timeline/
 cp assets/css/site.css _site/assets/css/
 cp assets/images/social.png _site/assets/images/
+for image_jpg in assets/images/*.jpg; do
+  [ -e "$image_jpg" ] || continue
+  cp "$image_jpg" "${image_jpg%.jpg}.webp" _site/assets/images/
+done
 cp data/timeline.json _site/data/
 cp assets/fonts/FiraMono-LICENSE.txt assets/fonts/Vazirmatn-LICENSE.txt _site/assets/fonts/
 touch _site/.nojekyll
@@ -76,7 +100,8 @@ sitemap_url() {
   done
   printf '</sitemapindex>\n'
 } > _site/sitemap.xml
-if find _site -type f \( -iname '*.jpeg' -o -iname '*.jpg' -o -iname '*.gltf' -o -iname '*.bin' -o -iname '*.wgsl' -o -iname '*.ttf' -o -iname '*.ktx' -o -iname '*.ts' \) -print -quit | grep -q .; then
+# Page images in assets/images are the only JPEGs the site may publish.
+if find _site -type f \( -iname '*.jpeg' -o -iname '*.jpg' -o -iname '*.gltf' -o -iname '*.bin' -o -iname '*.wgsl' -o -iname '*.ttf' -o -iname '*.ktx' -o -iname '*.ts' \) ! -path '_site/assets/images/*' -print -quit | grep -q .; then
   echo "Source files and embedded renderer inputs must not be deployed." >&2
   exit 1
 fi

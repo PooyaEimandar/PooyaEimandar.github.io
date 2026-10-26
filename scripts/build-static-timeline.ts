@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 interface TimelineLink {
@@ -11,6 +12,27 @@ interface TimelineEntry {
   title: string;
   text: string;
   links: TimelineLink[];
+  /** Players embedded beside the entry on /timeline/, in order, such as slides or videos. */
+  embeds?: TimelineEmbed[];
+  /** Pictures beside the entry on /timeline/, in order: each a JPEG in assets/images with a WebP of the same name. */
+  images?: TimelineImage[];
+}
+
+interface TimelineEmbed {
+  /** The player's https address, as the site's own embed code gives it. */
+  src: string;
+  /** What the player shows, for screen readers. */
+  title: string;
+  /** The embed code's size; the frame keeps this shape as it shrinks. */
+  width: number;
+  height: number;
+}
+
+interface TimelineImage {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
 }
 
 interface TimelineSection {
@@ -85,7 +107,9 @@ const sharedGraph = [
   {
     "@type": "Book",
     name: "Integrating Rust",
+    isbn: "9789365898262",
     author: [{ "@id": personId }, { "@type": "Person", name: "Abhishek Kumar" }],
+    publisher: { "@type": "Organization", name: "BPB Publications" },
     datePublished: "2024",
   },
 ];
@@ -220,6 +244,20 @@ function validateTimeline(data: unknown): asserts data is TimelineData {
         assertNonEmptyString(link.label, `${linkLabel} label`);
         validateUrl(link.url, `${linkLabel} URL`);
       });
+      if (entry.embeds !== undefined) {
+        if (!Array.isArray(entry.embeds) || entry.embeds.length === 0) {
+          throw new Error(`${entryLabel} embeds must be a non-empty array.`);
+        }
+        const embeds: unknown[] = entry.embeds;
+        embeds.forEach((embed, embedIndex) => validateEmbed(embed, `${entryLabel}, embed ${embedIndex + 1}`));
+      }
+      if (entry.images !== undefined) {
+        if (!Array.isArray(entry.images) || entry.images.length === 0) {
+          throw new Error(`${entryLabel} images must be a non-empty array.`);
+        }
+        const images: unknown[] = entry.images;
+        images.forEach((image, imageIndex) => validateImage(image, `${entryLabel}, image ${imageIndex + 1}`));
+      }
     });
   });
 }
@@ -250,6 +288,69 @@ ${items}
                 </ul>`;
 }
 
+function validateEmbed(embed: unknown, label: string): void {
+  assertObject(embed, label);
+  if (!validateUrl(embed.src, `${label} src`).startsWith("https:")) {
+    throw new Error(`${label} src must use https.`);
+  }
+  assertNonEmptyString(embed.title, `${label} title`);
+  assertPixelSize(embed, label);
+}
+
+function assertPixelSize(value: Record<string, unknown>, label: string): void {
+  for (const side of ["width", "height"] as const) {
+    if (!Number.isInteger(value[side]) || (value[side] as number) <= 0) {
+      throw new Error(`${label} ${side} must be a positive whole number of pixels.`);
+    }
+  }
+}
+
+function validateImage(image: unknown, label: string): void {
+  assertObject(image, label);
+  const src = assertNonEmptyString(image.src, `${label} src`);
+  if (!/^[a-z0-9-]+\.jpg$/.test(src)) {
+    throw new Error(`${label} src must be a .jpg file name in assets/images.`);
+  }
+  assertNonEmptyString(image.alt, `${label} alt`);
+  assertPixelSize(image, label);
+  // <picture> offers the WebP and falls back to the JPEG, so both must exist.
+  for (const file of [src, src.replace(/\.jpg$/, ".webp")]) {
+    if (!existsSync(new URL(`assets/images/${file}`, projectRoot))) {
+      throw new Error(`${label}: assets/images/${file} does not exist.`);
+    }
+  }
+}
+
+function renderImages(entry: TimelineEntry, target: RenderTarget): string {
+  if (target !== "page" || entry.images === undefined) {
+    return "";
+  }
+  const pictures = entry.images.map((image) => {
+    const base = `../assets/images/${image.src.replace(/\.jpg$/, "")}`;
+    return `
+                <picture>
+                  <source srcset="${base}.webp" type="image/webp">
+                  <img class="timeline-image" src="${base}.jpg" alt="${escapeHtml(image.alt)}" width="${image.width}" height="${image.height}" loading="lazy" decoding="async">
+                </picture>`;
+  }).join("");
+  return `
+              <div class="timeline-images">${pictures}
+              </div>`;
+}
+
+// Only /timeline/ embeds: on the homepage the timeline is hidden behind the
+// WebGPU scene, where a frame would load for every visitor and never be seen.
+function renderEmbeds(entry: TimelineEntry, target: RenderTarget): string {
+  if (target !== "page" || entry.embeds === undefined) {
+    return "";
+  }
+  const frames = entry.embeds.map((embed) => `
+                <iframe class="timeline-embed" src="${escapeHtml(embed.src)}" title="${escapeHtml(embed.title)}" style="max-width: ${embed.width}px; aspect-ratio: ${embed.width} / ${embed.height}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; fullscreen; gyroscope; picture-in-picture; clipboard-write; encrypted-media; web-share" allowfullscreen></iframe>`).join("");
+  return `
+              <div class="timeline-embeds">${frames}
+              </div>`;
+}
+
 function renderEntry(entry: TimelineEntry, target: RenderTarget): string {
   const id = assertSafeId(entry.id, "Timeline entry id");
   const year = entry.year;
@@ -262,7 +363,7 @@ function renderEntry(entry: TimelineEntry, target: RenderTarget): string {
             <time datetime="${year}">${year}</time>
             <div>
               <${heading}>${escapeHtml(entry.title)}</${heading}>
-              <p>${escapeHtml(entry.text)}</p>${renderLinks(entry.links)}
+              <p>${escapeHtml(entry.text)}</p>${renderLinks(entry.links)}${renderImages(entry, target)}${renderEmbeds(entry, target)}
             </div>
           </li>`;
 }
@@ -427,8 +528,14 @@ async function writeIfChanged(url: URL, expected: string): Promise<void> {
   }
 }
 
+/// HTML renders runs of whitespace, and whitespace beside a tag, the same, so
+/// an editor that rewraps the generated markup on save does not make it stale.
+function renderedText(html: string): string {
+  return html.replace(/\s+/g, " ").replace(/\s*(<[^>]*>)\s*/g, "$1").trim();
+}
+
 function assertGeneratedFileIsCurrent(actual: string, expected: string, label: string): void {
-  if (actual !== expected) {
+  if (renderedText(actual) !== renderedText(expected)) {
     throw new Error(`${label} is stale. Run npm run build:timeline.`);
   }
 }

@@ -11,9 +11,11 @@
 /app.js.map
 
 # The portrait photograph is a private, build-time-only KTX conversion input.
-# No JPEG belongs in this repository; CI refuses one that is committed.
+# The only JPEGs that belong in this repository are the page images in
+# assets/images; CI refuses one committed anywhere else.
 *.jpg
 *.jpeg
+!/assets/images/*.jpg
 
 # Local texture-pipeline caches and authoring files
 **/__pycache__/

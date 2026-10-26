@@ -667,6 +667,42 @@ body.webgpu-active .timeline-copy {
   color: var(--matrix-bright);
 }
 
+/* Pictures sit side by side and share a narrow column. Each is stored at twice
+   its 200px width, so it stays sharp on dense screens. */
+.timeline-images {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 0.9rem 0 0;
+}
+
+.timeline-images picture {
+  flex: 0 1 200px;
+  min-width: 0;
+}
+
+.timeline-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+}
+
+/* Each player keeps its embed code's shape as it shrinks with the column; the
+   generator sets its size from the timeline data. */
+.timeline-embeds {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0.9rem 0 0;
+}
+
+.timeline-embed {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #000;
+}
+
 .timeline-entry-links {
   display: flex;
   flex-wrap: wrap;
