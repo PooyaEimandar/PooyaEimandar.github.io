@@ -82,6 +82,20 @@
               "label": "DirectX 11.1 Game Programming",
               "url": "https://www.amazon.ae/DirectX-11-1-Programming-Pooya-Eimandar/dp/184969480X"
             }
+          ],
+          "images": [
+            {
+              "src": "directx-11-1-game-programming-front.jpg",
+              "alt": "Front cover of DirectX 11.1 Game Programming by Pooya Eimandar, published by Packt",
+              "width": 400,
+              "height": 493
+            },
+            {
+              "src": "directx-11-1-game-programming-back.jpg",
+              "alt": "Back cover of DirectX 11.1 Game Programming, listing what the book teaches",
+              "width": 400,
+              "height": 493
+            }
           ]
         },
         {
@@ -138,6 +152,14 @@
               "label": "Gaming in Healthcare",
               "url": "https://www.slideshare.net/PooyaEimandar/ss-38769072"
             }
+          ],
+          "embeds": [
+            {
+              "src": "https://www.slideshare.net/slideshow/embed_code/key/KOa9wXyRcvOnPG",
+              "title": "Gaming in Healthcare slides",
+              "width": 610,
+              "height": 515
+            }
           ]
         },
         {
@@ -157,6 +179,14 @@
               "label": "Game Programming Using Qt",
               "url": "https://amzn.eu/d/0fFRbPqB"
             }
+          ],
+          "images": [
+            {
+              "src": "game-programming-using-qt.jpg",
+              "alt": "Cover of Game Programming Using Qt: Beginner's Guide by Witold Wysota and Lorenz Haas, published by Packt",
+              "width": 400,
+              "height": 493
+            }
           ]
         },
         {
@@ -168,6 +198,14 @@
             {
               "label": "Rust for C++ Programmers",
               "url": "https://a.co/d/0gSB8YRa"
+            }
+          ],
+          "images": [
+            {
+              "src": "rust-for-cpp-programmers.jpg",
+              "alt": "Cover of Rust for C++ Programmers by Mustafif Khan, published by BPB",
+              "width": 400,
+              "height": 533
             }
           ]
         },
@@ -181,6 +219,20 @@
               "label": "Integrating Rust",
               "url": "https://a.co/d/0fBGVnbZ"
             }
+          ],
+          "images": [
+            {
+              "src": "integrating-rust-front.jpg",
+              "alt": "Front cover of Integrating Rust by Abhishek Kumar and Pooya Eimandar, published by BPB",
+              "width": 400,
+              "height": 503
+            },
+            {
+              "src": "integrating-rust-back.jpg",
+              "alt": "Back cover of Integrating Rust, describing what readers will learn",
+              "width": 400,
+              "height": 477
+            }
           ]
         },
         {
@@ -192,6 +244,14 @@
             {
               "label": "Web Development in Rust",
               "url": "https://a.co/d/08vdl9t2"
+            }
+          ],
+          "images": [
+            {
+              "src": "web-development-in-rust.jpg",
+              "alt": "Cover of Web Development in Rust by Viktor Daróczi, published by BPB",
+              "width": 400,
+              "height": 533
             }
           ]
         }
@@ -268,6 +328,14 @@
               "label": "Watch The Master Chef",
               "url": "https://vimeo.com/96698402"
             }
+          ],
+          "embeds": [
+            {
+              "src": "https://player.vimeo.com/video/96698402?h=ff6cc71a5d",
+              "title": "The Master Chef",
+              "width": 640,
+              "height": 360
+            }
           ]
         },
         {
@@ -279,6 +347,14 @@
             {
               "label": "Watch City2",
               "url": "https://vimeo.com/80917932"
+            }
+          ],
+          "embeds": [
+            {
+              "src": "https://player.vimeo.com/video/80917932?h=3ae32c4a50",
+              "title": "City2",
+              "width": 640,
+              "height": 360
             }
           ]
         },
@@ -300,6 +376,26 @@
               "label": "Persian Engine and Softimage FaceRobot",
               "url": "https://vimeo.com/83172048"
             }
+          ],
+          "embeds": [
+            {
+              "src": "https://player.vimeo.com/video/79195038?h=000ba078fc",
+              "title": "Persian Engine editor",
+              "width": 640,
+              "height": 360
+            },
+            {
+              "src": "https://player.vimeo.com/video/79210871?h=e26b7c168b",
+              "title": "Persian Engine animation mixer",
+              "width": 640,
+              "height": 360
+            },
+            {
+              "src": "https://player.vimeo.com/video/83172048?h=ed697a9747",
+              "title": "Persian Engine and Softimage FaceRobot",
+              "width": 640,
+              "height": 360
+            }
           ]
         },
         {
@@ -311,6 +407,14 @@
             {
               "label": "Watch the first playout version",
               "url": "https://www.youtube.com/watch?v=EZSdEjBvuGY"
+            }
+          ],
+          "embeds": [
+            {
+              "src": "https://www.youtube.com/embed/EZSdEjBvuGY?si=AQnRbJnoRdPv8pXV",
+              "title": "The first version of the real-time playout and CG editor",
+              "width": 560,
+              "height": 315
             }
           ]
         },
@@ -343,12 +447,7 @@
           "year": "2017",
           "title": "Project Falcon",
           "text": "Joined Fanap as Project Manager of Project Falcon.",
-          "links": [
-            {
-              "label": "Watch Project Falcon",
-              "url": "https://www.youtube.com/watch?v=ygpz35ddZ_4"
-            }
-          ]
+          "links": []
         },
         {
           "id": "playpod",
@@ -391,6 +490,20 @@
             {
               "label": "Arium",
               "url": "https://www.youtube.com/@arium_gg"
+            }
+          ],
+          "embeds": [
+            {
+              "src": "https://www.youtube.com/embed/MMbpGVz29FQ?si=AM02Uu92OAJ1KFi9",
+              "title": "Arium unveils its multiplayer feature",
+              "width": 560,
+              "height": 315
+            },
+            {
+              "src": "https://www.youtube.com/embed/Q-sgGF8AUFU?si=HR3AyxSyiNL28Khu",
+              "title": "Arium achieves AV1 streaming",
+              "width": 560,
+              "height": 315
             }
           ]
         },
