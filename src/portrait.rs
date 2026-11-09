@@ -147,6 +147,7 @@ pub fn load_default_portrait() -> RenderResult<RgbaKtxImage> {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_macros, reason = "Tests assert expected outcomes.")]
 mod tests {
     use super::*;
 

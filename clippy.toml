@@ -1,0 +1,10 @@
+# Macros that panic on a failed check. Runtime code returns an error instead;
+# test modules and compile-time checks have scoped exemptions in the source.
+disallowed-macros = [
+    { path = "std::assert", reason = "return an error instead of panicking" },
+    { path = "std::assert_eq", reason = "return an error instead of panicking" },
+    { path = "std::assert_ne", reason = "return an error instead of panicking" },
+    { path = "std::debug_assert", reason = "return an error or log instead of panicking" },
+    { path = "std::debug_assert_eq", reason = "return an error or log instead of panicking" },
+    { path = "std::debug_assert_ne", reason = "return an error or log instead of panicking" },
+]

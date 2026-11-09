@@ -1,3 +1,8 @@
+#[allow(
+    clippy::disallowed_macros,
+    reason = "Pod emits compile-time layout assertions outside its input structs."
+)]
+mod gpu_types;
 mod portrait;
 mod timeline;
 
@@ -8,7 +13,8 @@ use std::{
     sync::atomic::{AtomicBool, AtomicU32, Ordering},
 };
 
-use bytemuck::{Pod, Zeroable};
+use bytemuck::Zeroable;
+use gpu_types::{MatrixUniforms, PortraitUniforms, TerminalVertex, TextUniforms};
 use portrait::RgbaKtxImage;
 use sib::render::{
     Example, ExampleSettings, FrameStats, RenderContext, RenderError, RenderResult, bind_group,
@@ -64,16 +70,22 @@ const MOBILE_TERMINAL_VERTICAL_OFFSET: f32 = -0.43;
 // The atlas supplies the solid face of each glyph. Keep the extruded contour
 // narrow so it adds depth without visually turning the regular font bold.
 const TERMINAL_STROKE_WIDTH: f32 = TERMINAL_FONT_SIZE * 0.045;
-const _: () = assert!(MATRIX_INTRO_END < FACE_REVEAL_END);
-const _: () = assert!(FACE_REVEAL_END < TIMELINE_START);
-const _: () = assert!(MATRIX_SIGNAL_MIN_INTERVAL < MATRIX_SIGNAL_MAX_INTERVAL);
-const _: () = assert!(MATRIX_SIGNAL_DURATION < MATRIX_SIGNAL_MIN_INTERVAL);
-const _: () = assert!(TERMINAL_TEXT_SCALE == 1.5);
-const _: () = assert!(MOBILE_TERMINAL_SIZE_MULTIPLIER == 1.5);
-const _: () = assert!(TERMINAL_STROKE_WIDTH <= TERMINAL_FONT_SIZE * 0.05);
-const _: () = assert!(MOBILE_TERMINAL_BASE_SCALE < MOBILE_TERMINAL_BOOSTED_SCALE);
-const _: () = assert!(MOBILE_TERMINAL_BOOST_START_ASPECT < MOBILE_TERMINAL_BOOST_END_ASPECT);
-const _: () = assert!(MOBILE_TERMINAL_BOOST_END_ASPECT < MOBILE_TIMELINE_MAX_ASPECT);
+#[allow(
+    clippy::disallowed_macros,
+    reason = "These invariants are checked at compile time and cannot panic at runtime."
+)]
+const _: () = {
+    assert!(MATRIX_INTRO_END < FACE_REVEAL_END);
+    assert!(FACE_REVEAL_END < TIMELINE_START);
+    assert!(MATRIX_SIGNAL_MIN_INTERVAL < MATRIX_SIGNAL_MAX_INTERVAL);
+    assert!(MATRIX_SIGNAL_DURATION < MATRIX_SIGNAL_MIN_INTERVAL);
+    assert!(TERMINAL_TEXT_SCALE == 1.5);
+    assert!(MOBILE_TERMINAL_SIZE_MULTIPLIER == 1.5);
+    assert!(TERMINAL_STROKE_WIDTH <= TERMINAL_FONT_SIZE * 0.05);
+    assert!(MOBILE_TERMINAL_BASE_SCALE < MOBILE_TERMINAL_BOOSTED_SCALE);
+    assert!(MOBILE_TERMINAL_BOOST_START_ASPECT < MOBILE_TERMINAL_BOOST_END_ASPECT);
+    assert!(MOBILE_TERMINAL_BOOST_END_ASPECT < MOBILE_TIMELINE_MAX_ASPECT);
+};
 
 static REDUCED_MOTION: AtomicBool = AtomicBool::new(false);
 static PRIMARY_ACTION_REQUEST: AtomicBool = AtomicBool::new(false);
@@ -248,40 +260,6 @@ fn copyright_notice() -> String {
 #[cfg(target_arch = "wasm32")]
 thread_local! {
     static LINK_PICK_SNAPSHOT: RefCell<Option<LinkPickSnapshot>> = const { RefCell::new(None) };
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Pod, Zeroable)]
-struct MatrixUniforms {
-    timing: [f32; 4],
-    viewport: [f32; 4],
-    signal: [f32; 4],
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Pod, Zeroable)]
-struct PortraitUniforms {
-    timing: [f32; 4],
-    viewport: [f32; 4],
-    placement: [f32; 4],
-    eyes: [f32; 4],
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Pod, Zeroable)]
-struct TextUniforms {
-    view_projection: [[f32; 4]; 4],
-    model: [[f32; 4]; 4],
-    params: [f32; 4],
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Pod, Zeroable)]
-struct TerminalVertex {
-    position: [f32; 3],
-    color: [f32; 4],
-    /// Character reveal order and vertex kind (0 = glyph, 1 = cursor).
-    meta: [f32; 2],
 }
 
 impl TerminalVertex {
@@ -2461,6 +2439,7 @@ pub fn wasm_start() -> Result<(), wasm_bindgen::JsValue> {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_macros, reason = "Tests assert expected outcomes.")]
 mod tests {
     use super::*;
 
