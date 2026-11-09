@@ -21,6 +21,10 @@ const DESKTOP_HEADER_LINES: usize = 5;
 const DESKTOP_FOOTER_LINES: usize = 3;
 const DESKTOP_BODY_LINES: usize = MAX_TERMINAL_LINES - DESKTOP_HEADER_LINES - DESKTOP_FOOTER_LINES;
 // A continued slide spends one body line on `| # continued`.
+#[allow(
+    clippy::disallowed_macros,
+    reason = "This invariant is checked at compile time and cannot panic at runtime."
+)]
 const _: () = assert!(DESKTOP_BODY_LINES > 1);
 
 #[derive(Debug, Deserialize)]
@@ -815,6 +819,7 @@ fn terminal_ascii(text: &str) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::disallowed_macros, reason = "Tests assert expected outcomes.")]
 mod tests {
     use super::*;
 
