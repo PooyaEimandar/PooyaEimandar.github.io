@@ -763,7 +763,7 @@ body.webgpu-active .timeline-copy {
 
 body.webgpu-active .about,
 body.webgpu-active .contact-panel,
-body.webgpu-active .site-footer {
+body.webgpu-active .site-footer p {
   position: absolute !important;
   width: 1px !important;
   height: 1px !important;
@@ -778,6 +778,7 @@ body.webgpu-active .site-footer {
 
 .site-footer {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding: 1.35rem var(--page-gutter);
@@ -789,6 +790,7 @@ body.webgpu-active .site-footer {
 
 /* Centred, stacked footer matching the WebGPU section's. */
 .timeline-page .site-footer {
+  position: relative;
   flex-direction: column;
   align-items: center;
   gap: 0.6rem;
@@ -797,6 +799,46 @@ body.webgpu-active .site-footer {
 
 .site-footer p {
   margin: 0;
+}
+
+.social-links {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.site-footer .social-links a {
+  display: flex;
+  padding: 0.25rem;
+  color: var(--ink-muted);
+  transition: transform 160ms ease;
+}
+
+.site-footer .social-links a:hover,
+.site-footer .social-links a:focus-visible {
+  transform: scale(1.5);
+}
+
+.social-links svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Bottom right, level with the copyright line. */
+.timeline-page .social-links {
+  position: absolute;
+  right: calc(var(--page-gutter) - 0.25rem);
+  bottom: 1.04rem;
+}
+
+/* The canvas draws the copyright line, so only the icons stay, at its right
+   end. The offsets follow the renderer's copyright_overlay_layout. */
+body.webgpu-active .site-footer {
+  position: fixed;
+  z-index: 30;
+  right: calc(clamp(16px, 4vw, 48px) - 0.25rem);
+  bottom: calc(clamp(18px, 2.8dvh, 32px) - 3px);
+  padding: 0;
+  background: none;
 }
 
 .noscript-message {
@@ -957,6 +999,20 @@ body.webgpu-active .site-footer {
   .site-footer {
     align-items: start;
     flex-direction: column;
+  }
+
+  .social-links {
+    align-self: flex-end;
+  }
+
+  .timeline-page .social-links {
+    position: static;
+  }
+
+  /* The centred copyright line is too wide to share, so the icons sit just
+     above it. */
+  body.webgpu-active .site-footer {
+    bottom: calc(clamp(18px, 2.8dvh, 32px) + 16px);
   }
 }
 
