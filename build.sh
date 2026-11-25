@@ -55,7 +55,7 @@ scripts/build-wasm.sh "$portfolio_profile"
 
 echo "Staging the deployable site"
 mkdir -p _site/data _site/timeline _site/assets/css _site/assets/fonts _site/assets/images
-cp CNAME THIRD_PARTY_NOTICES.md LICENSE robots.txt 404.html _site/
+cp CNAME THIRD_PARTY_NOTICES.md LICENSE robots.txt 404.html Pooya_Eimandar_CV.pdf _site/
 portfolio_build_id="${GITHUB_SHA:-$(date -u +%Y%m%d%H%M%S)}"
 sed "s/__BUILD_ID__/${portfolio_build_id}/g" index.html > _site/index.html
 cp timeline/index.html _site/timeline/
